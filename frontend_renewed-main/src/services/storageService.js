@@ -1,0 +1,1806 @@
+/*
+ Offline-first storage service using IndexedDB (Dexie.js) with light encryption.
+ Tables: patients, households, visits, health_records, messages, notifications, sync_queue, sessions
+*/
+
+import Dexie from 'dexie';
+import CryptoJS from 'crypto-js';
+
+// WARNING: Replace this with a secure key provisioning strategy in production.
+const DEFAULT_ENCRYPTION_KEY = 'local-dev-only-change-me';
+
+function encryptString(plainText, key = DEFAULT_ENCRYPTION_KEY) {
+  if (!plainText) return plainText;
+  try {
+    return CryptoJS.AES.encrypt(plainText, key).toString();
+  } catch (error) {
+    console.error('Encryption failed', error);
+    return plainText;
+  }
+}
+
+function decryptString(cipherText, key = DEFAULT_ENCRYPTION_KEY) {
+  if (!cipherText) return cipherText;
+  try {
+    const bytes = CryptoJS.AES.decrypt(cipherText, key);
+    const decoded = bytes.toString(CryptoJS.enc.Utf8);
+    return decoded || cipherText; // return original if decode fails
+  } catch (error) {
+    console.error('Decryption failed', error);
+    return cipherText;
+  }
+}
+
+class ASHADatabase extends Dexie {
+  constructor() {
+    super('ASHA_EHR_DB');
+    this.version(1).stores({
+      patients: '++id, uuid, householdId, name, phone, syncedAt, updatedAt',
+      households: '++id, uuid, headName, village, syncedAt, updatedAt',
+      visits: '++id, uuid, patientUuid, type, date, syncedAt, updatedAt',
+      health_records: '++id, uuid, patientUuid, category, date, syncedAt, updatedAt',
+      messages: '++id, uuid, threadId, toRole, fromRole, createdAt, syncedAt',
+      notifications: '++id, uuid, type, dueAt, seen, syncedAt',
+      sync_queue: '++id, entity, entityUuid, operation, createdAt, retries, lastError',
+      sessions: '++id, key, createdAt'
+    });
+
+    this.patients = this.table('patients');
+    this.households = this.table('households');
+    this.visits = this.table('visits');
+    this.health_records = this.table('health_records');
+    this.messages = this.table('messages');
+    this.notifications = this.table('notifications');
+    this.sync_queue = this.table('sync_queue');
+    this.sessions = this.table('sessions');
+  }
+}
+
+const db = new ASHADatabase();
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function ensureUuid(entity) {
+  if (!entity.uuid) {
+    entity.uuid = cryptoRandomUuid();
+  }
+  return entity;
+}
+
+function cryptoRandomUuid() {
+  // Fallback if crypto is unavailable
+  try {
+    // eslint-disable-next-line no-undef
+    if (globalThis.crypto && globalThis.crypto.randomUUID) {
+      // eslint-disable-next-line no-undef
+      return globalThis.crypto.randomUUID();
+    }
+  } catch (_) {}
+  const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
+}
+
+function prepareForSave(record, sensitiveFields = []) {
+  const copy = { ...record };
+  for (const field of sensitiveFields) {
+    if (copy[field]) copy[field] = encryptString(String(copy[field]));
+  }
+  copy.updatedAt = nowIso();
+  if (!copy.createdAt) copy.createdAt = copy.updatedAt;
+  return copy;
+}
+
+function prepareForRead(record, sensitiveFields = []) {
+  if (!record) return record;
+  const copy = { ...record };
+  for (const field of sensitiveFields) {
+    if (copy[field]) copy[field] = decryptString(String(copy[field]));
+  }
+  return copy;
+}
+
+class StorageService {
+  // Notifications helpers
+  async markNotificationSeen(uuid) {
+    await db.notifications.where({ uuid }).modify({ seen: true });
+  }
+
+  // Patients
+  async addPatient(patient) {
+    const withUuid = ensureUuid({ ...patient });
+    const prepared = prepareForSave(withUuid, ['phone', 'aadhar', 'address']);
+    const id = await db.patients.add({ ...prepared, syncedAt: null });
+    await this.enqueueSync('patients', prepared.uuid, 'create');
+    return { id, uuid: prepared.uuid };
+  }
+
+  async updatePatientByUuid(uuid, updates) {
+    const prepared = prepareForSave(updates, ['phone', 'aadhar', 'address']);
+    await db.patients.where({ uuid }).modify({ ...prepared, syncedAt: null });
+    await this.enqueueSync('patients', uuid, 'update');
+  }
+
+  async deletePatientByUuid(uuid) {
+    await db.patients.where({ uuid }).delete();
+    await this.enqueueSync('patients', uuid, 'delete');
+  }
+
+  async getPatientByUuid(uuid) {
+    const rec = await db.patients.where({ uuid }).first();
+    return prepareForRead(rec, ['phone', 'aadhar', 'address']);
+  }
+
+  async listPatients({ householdUuid } = {}) {
+    let coll = db.patients;
+    if (householdUuid) {
+      coll = coll.where({ householdId: householdUuid });
+      const arr = await coll.toArray();
+      return arr.map(r => prepareForRead(r, ['phone', 'aadhar', 'address']));
+    }
+    const arr = await coll.toArray();
+    return arr.map(r => prepareForRead(r, ['phone', 'aadhar', 'address']));
+  }
+
+  // Households
+  async addHousehold(household) {
+    const withUuid = ensureUuid({ ...household });
+    const prepared = prepareForSave(withUuid, ['address', 'landmark']);
+    const id = await db.households.add({ ...prepared, syncedAt: null });
+    await this.enqueueSync('households', prepared.uuid, 'create');
+    return { id, uuid: prepared.uuid };
+  }
+
+  async updateHouseholdByUuid(uuid, updates) {
+    const prepared = prepareForSave(updates, ['address', 'landmark']);
+    await db.households.where({ uuid }).modify({ ...prepared, syncedAt: null });
+    await this.enqueueSync('households', uuid, 'update');
+  }
+
+  async deleteHouseholdByUuid(uuid) {
+    await db.households.where({ uuid }).delete();
+    await this.enqueueSync('households', uuid, 'delete');
+  }
+
+  async getHouseholdByUuid(uuid) {
+    const rec = await db.households.where({ uuid }).first();
+    return prepareForRead(rec, ['address', 'landmark']);
+  }
+
+  async listHouseholds() {
+    const arr = await db.households.toArray();
+    return arr.map(r => prepareForRead(r, ['address', 'landmark']));
+  }
+
+  // Visits
+  async addVisit(visit) {
+    const withUuid = ensureUuid({ ...visit });
+    const prepared = prepareForSave(withUuid, []);
+    const id = await db.visits.add({ ...prepared, syncedAt: null });
+    await this.enqueueSync('visits', prepared.uuid, 'create');
+    return { id, uuid: prepared.uuid };
+  }
+
+  async listVisitsByPatient(patientUuid) {
+    const arr = await db.visits.where({ patientUuid }).toArray();
+    return arr.map(r => prepareForRead(r, []));
+  }
+
+  // Health Records
+  async addHealthRecord(record) {
+    const withUuid = ensureUuid({ ...record });
+    const prepared = prepareForSave(withUuid, []);
+    const id = await db.health_records.add({ ...prepared, syncedAt: null });
+    await this.enqueueSync('health_records', prepared.uuid, 'create');
+    return { id, uuid: prepared.uuid };
+  }
+
+  async listHealthRecordsByPatient(patientUuid) {
+    const arr = await db.health_records.where({ patientUuid }).toArray();
+    return arr.map(r => prepareForRead(r, []));
+  }
+
+  // Messages
+  async addMessage(message) {
+    const withUuid = ensureUuid({ ...message });
+    const prepared = prepareForSave(withUuid, ['body']);
+    const id = await db.messages.add({ ...prepared, syncedAt: null });
+    await this.enqueueSync('messages', prepared.uuid, 'create');
+    return { id, uuid: prepared.uuid };
+  }
+
+  async listMessagesByThread(threadId) {
+    const arr = await db.messages.where({ threadId }).toArray();
+    return arr.map(r => prepareForRead(r, ['body']));
+  }
+
+  // Notifications
+  async addNotification(notification) {
+    const withUuid = ensureUuid({ ...notification });
+    const prepared = prepareForSave(withUuid, []);
+    const id = await db.notifications.add({ ...prepared, syncedAt: null });
+    await this.enqueueSync('notifications', prepared.uuid, 'create');
+    return { id, uuid: prepared.uuid };
+  }
+
+  async listPendingNotifications(now = new Date()) {
+    const arr = await db.notifications.where('dueAt').belowOrEqual(now.toISOString()).toArray();
+    return arr.map(r => prepareForRead(r, []));
+  }
+
+  // Sessions (for authService)
+  async setSession(key, valueObj) {
+    const payload = encryptString(JSON.stringify(valueObj));
+    await db.sessions.where({ key }).delete();
+    await db.sessions.add({ key, value: payload, createdAt: nowIso() });
+  }
+
+  async getSession(key) {
+    const rec = await db.sessions.where({ key }).first();
+    if (!rec) return null;
+    try {
+      const json = decryptString(rec.value);
+      return JSON.parse(json);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async clearSession(key) {
+    await db.sessions.where({ key }).delete();
+  }
+
+  // Sync queue helpers
+  async enqueueSync(entity, entityUuid, operation) {
+    return db.sync_queue.add({
+      entity,
+      entityUuid,
+      operation, // create | update | delete
+      createdAt: nowIso(),
+      retries: 0,
+      lastError: null
+    });
+  }
+
+  async markEntitySynced(entity, entityUuid) {
+    const table = db[entity];
+    if (!table) return;
+    await table.where({ uuid: entityUuid }).modify({ syncedAt: nowIso() });
+    await db.sync_queue.where({ entity, entityUuid }).delete();
+  }
+
+  async listSyncQueue(limit = 100) {
+    const arr = await db.sync_queue.orderBy('createdAt').limit(limit).toArray();
+    return arr;
+  }
+
+  async setSyncError(id, errorMessage) {
+    await db.sync_queue.update(id, { retries: Dexie.increment(1), lastError: errorMessage });
+  }
+}
+
+const storageService = new StorageService();
+export default storageService;
+
+// src/services/storageService.js
+import { v4 as uuidv4 } from 'uuid';
+
+// Initialize storage with default data
+export const initializeStorage = () => {
+  try {
+    // Check if storage is already initialized
+    if (localStorage.getItem('storageInitialized')) {
+      return;
+    }
+
+    // Set all default data
+    localStorage.setItem('medicines', JSON.stringify(getDefaultMedicines()));
+    localStorage.setItem('users', JSON.stringify([]));
+    localStorage.setItem('doctors', JSON.stringify(getDefaultDoctors()));
+    localStorage.setItem('ashas', JSON.stringify([]));
+    localStorage.setItem('patients', JSON.stringify([]));
+    localStorage.setItem('healthRecords', JSON.stringify([]));
+    localStorage.setItem('messages', JSON.stringify([]));
+    localStorage.setItem('prescriptions', JSON.stringify([]));
+    localStorage.setItem('visits', JSON.stringify([]));
+    localStorage.setItem('orders', JSON.stringify([]));
+    localStorage.setItem('pharmacies', JSON.stringify(getDefaultPharmacies()));
+    localStorage.setItem('otps', JSON.stringify([]));
+    localStorage.setItem('session', JSON.stringify({ current: null }));
+    localStorage.setItem('doctorStats', JSON.stringify({}));
+    localStorage.setItem('cart', JSON.stringify([]));
+    localStorage.setItem('deliveries', JSON.stringify([]));
+    localStorage.setItem('pharmacyMedicines', JSON.stringify([]));
+    localStorage.setItem('bills', JSON.stringify([]));
+    localStorage.setItem('pharmacyPrescriptions', JSON.stringify([]));
+    
+    // ASHA functionality storage
+    localStorage.setItem('ashaPatients', JSON.stringify([]));
+    localStorage.setItem('campaigns', JSON.stringify([]));
+    
+    // Mark as initialized
+    localStorage.setItem('storageInitialized', 'true');
+    
+    console.log('Storage initialized successfully with clean data');
+  } catch (error) {
+    console.error('Error initializing storage:', error);
+  }
+};
+
+// Default data generators
+const getDefaultMedicines = () => {
+  return [
+    {
+      id: 'med-1',
+      name: 'Paracetamol',
+      company: 'Generic',
+      dosage: '500mg',
+      category: 'Pain Relief',
+      price: 25,
+      description: 'Used for fever and pain relief'
+    },
+    {
+      id: 'med-2',
+      name: 'Amoxicillin',
+      company: 'Generic',
+      dosage: '250mg',
+      category: 'Antibiotic',
+      price: 45,
+      description: 'Antibiotic for bacterial infections'
+    },
+    {
+      id: 'med-3',
+      name: 'Metformin',
+      company: 'Generic',
+      dosage: '500mg',
+      category: 'Diabetes',
+      price: 35,
+      description: 'Used for type 2 diabetes management'
+    },
+    {
+      id: 'med-4',
+      name: 'Omeprazole',
+      company: 'Generic',
+      dosage: '20mg',
+      category: 'Gastric',
+      price: 30,
+      description: 'Used for acid reflux and stomach ulcers'
+    },
+    {
+      id: 'med-5',
+      name: 'Atorvastatin',
+      company: 'Generic',
+      dosage: '10mg',
+      category: 'Cholesterol',
+      price: 50,
+      description: 'Used to lower cholesterol levels'
+    },
+    {
+      id: 'med-6',
+      name: 'Aspirin',
+      company: 'Bayer',
+      dosage: '75mg',
+      category: 'Blood Thinner',
+      price: 15,
+      description: 'Low-dose aspirin for heart protection'
+    },
+    {
+      id: 'med-7',
+      name: 'Losartan',
+      company: 'Generic',
+      dosage: '50mg',
+      category: 'Blood Pressure',
+      price: 40,
+      description: 'Used for high blood pressure'
+    },
+    {
+      id: 'med-8',
+      name: 'Vitamin D3',
+      company: 'HealthVit',
+      dosage: '1000 IU',
+      category: 'Vitamin',
+      price: 20,
+      description: 'Vitamin D supplement'
+    }
+  ];
+};
+
+const getDefaultDoctors = () => {
+  return [
+    {
+      id: 'doctor-demo-456',
+      name: 'Dr. Priya Sharma',
+      phone: '+91-9876540001',
+      specialization: 'General Medicine',
+      hospital: 'Primary Health Center',
+      experience: '8 years',
+      createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+    }
+  ];
+};
+
+const getDefaultPharmacies = () => {
+  return [
+    {
+      id: 'pharmacy-1',
+      name: 'HealthCare Pharmacy',
+      phone: '+91-9876540101',
+      address: 'Main Market, Demo Village',
+      licenseNumber: 'DL-PHR-001',
+      ownerName: 'Suresh Gupta',
+      location: { lat: 28.6139, lng: 77.2090 },
+      distance: '0.5 km',
+      isOpen: true,
+      openTime: '08:00 AM',
+      closeTime: '10:00 PM',
+      createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'pharmacy-2',
+      name: 'City Medical Store',
+      phone: '+91-9876540102',
+      address: 'Hospital Road, Demo Village',
+      licenseNumber: 'DL-PHR-002',
+      ownerName: 'Meena Sharma',
+      location: { lat: 28.6129, lng: 77.2080 },
+      distance: '1.2 km',
+      isOpen: true,
+      openTime: '07:00 AM',
+      closeTime: '11:00 PM',
+      createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'pharmacy-3',
+      name: 'Apollo Pharmacy',
+      phone: '+91-9876540103',
+      address: 'Civil Lines, Demo Village',
+      licenseNumber: 'DL-PHR-003',
+      ownerName: 'Rajesh Verma',
+      location: { lat: 28.6149, lng: 77.2100 },
+      distance: '2.1 km',
+      isOpen: false,
+      openTime: '09:00 AM',
+      closeTime: '09:00 PM',
+      createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'pharmacy-4',
+      name: 'MedPlus Health Services',
+      phone: '+91-9876540104',
+      address: 'Sector 12, Demo Village',
+      licenseNumber: 'DL-PHR-004',
+      ownerName: 'Priya Singh',
+      location: { lat: 28.6110, lng: 77.2120 },
+      distance: '3.0 km',
+      isOpen: true,
+      openTime: '08:30 AM',
+      closeTime: '10:30 PM',
+      createdAt: new Date(Date.now() - 75 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'pharmacy-5',
+      name: '1mg Tata Digital',
+      phone: '+91-9876540105',
+      address: 'Shopping Complex, Demo Village',
+      licenseNumber: 'DL-PHR-005',
+      ownerName: 'Amit Kumar',
+      location: { lat: 28.6160, lng: 77.2070 },
+      distance: '2.8 km',
+      isOpen: true,
+      openTime: '24/7',
+      closeTime: '24/7',
+      createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString()
+    }
+  ];
+};
+
+// Generate default health records for any user
+export const generateDefaultHealthRecords = (userId) => {
+  return [
+    {
+      id: `record-${userId}-1`,
+      patientId: userId,
+      title: 'Blood Test Results',
+      notes: 'Complete blood count and lipid profile. All values within normal range.',
+      fileName: 'blood_test_report.pdf',
+      uploadedBy: userId,
+      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: `record-${userId}-2`,
+      patientId: userId,
+      title: 'X-Ray Chest',
+      notes: 'Routine chest X-ray. No abnormalities detected. Lungs clear.',
+      fileName: 'chest_xray.jpg',
+      uploadedBy: userId,
+      createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: `record-${userId}-3`,
+      patientId: userId,
+      title: 'ECG Report',
+      notes: 'Electrocardiogram shows normal sinus rhythm. Heart rate: 72 bpm.',
+      fileName: 'ecg_report.pdf',
+      uploadedBy: userId,
+      createdAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString()
+    }
+  ];
+};
+
+// Generate default prescriptions for any user
+export const generateDefaultPrescriptions = (userId) => {
+  return [
+    {
+      id: `prescription-${userId}-1`,
+      patientId: userId,
+      doctorId: 'doctor-demo-456',
+      doctorName: 'Dr. Priya Sharma',
+      text: 'Metformin 500mg - Take twice daily after meals for diabetes management. Monitor blood sugar levels weekly.',
+      medicines: [
+        { name: 'Metformin', dosage: '500mg', frequency: 'Twice daily', duration: '30 days' }
+      ],
+      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: `prescription-${userId}-2`,
+      patientId: userId,
+      doctorId: 'doctor-demo-456',
+      doctorName: 'Dr. Priya Sharma',
+      text: 'Paracetamol 500mg for fever and pain. Take as needed, maximum 3 times per day.',
+      medicines: [
+        { name: 'Paracetamol', dosage: '500mg', frequency: 'As needed (max 4/day)', duration: '5 days' }
+      ],
+      createdAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString()
+    }
+  ];
+};
+
+// Generate default orders for any user
+export const generateDefaultOrders = (userId) => {
+  return [
+    {
+      id: `order-${userId}-1`,
+      userId: userId,
+      pharmacyId: 'pharmacy-1',
+      pharmacyName: 'HealthCare Pharmacy',
+      items: [
+        { medicineId: 'med-3', medicineName: 'Metformin', quantity: 2, price: 35 },
+        { medicineId: 'med-6', medicineName: 'Aspirin', quantity: 1, price: 15 }
+      ],
+      total: 85,
+      status: 'delivered',
+      deliveryAddress: 'Demo Village, PIN: 123456',
+      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      deliveredAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+    },
+    {
+      id: `order-${userId}-2`,
+      userId: userId,
+      pharmacyId: 'pharmacy-2',
+      pharmacyName: 'City Medical Store',
+      items: [
+        { medicineId: 'med-1', medicineName: 'Paracetamol', quantity: 3, price: 25 }
+      ],
+      total: 75,
+      status: 'shipped',
+      deliveryAddress: 'Demo Village, PIN: 123456',
+      createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      shippedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+    }
+  ];
+};
+
+// Generic storage helpers
+export const readStorage = (key, defaultValue = null) => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    console.error(`Error reading storage key ${key}:`, error);
+    return defaultValue;
+  }
+};
+
+export const writeStorage = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.error(`Error writing storage key ${key}:`, error);
+    return false;
+  }
+};
+
+export const clearStorage = () => {
+  try {
+    localStorage.clear();
+    return true;
+  } catch (error) {
+    console.error('Error clearing storage:', error);
+    return false;
+  }
+};
+
+// Function to reset storage with fresh dummy data
+export const resetWithDummyData = () => {
+  try {
+    localStorage.removeItem('storageInitialized');
+    initializeStorage();
+    return true;
+  } catch (error) {
+    console.error('Error resetting storage with dummy data:', error);
+    return false;
+  }
+};
+
+// User management
+export const createUser = (userData) => {
+  try {
+    const users = readStorage('users', []);
+    const newUser = {
+      id: uuidv4(),
+      ...userData,
+      createdAt: new Date().toISOString()
+    };
+    users.push(newUser);
+    writeStorage('users', users);
+    
+    // Create default data for the new user
+    initializeUserData(newUser.id);
+    
+    return { success: true, user: newUser };
+  } catch (error) {
+    console.error('Error creating user:', error);
+    return { success: false, error: 'Failed to create user' };
+  }
+};
+
+// Initialize default data for a user
+export const initializeUserData = (userId) => {
+  try {
+    // Create patient record
+    const patientData = {
+      id: userId,
+      name: 'User', // Will be updated when user data is available
+      age: 'Not specified',
+      phone: 'Not specified',
+      village: 'Not specified',
+      ownerRole: 'user',
+      ownerId: userId,
+      registeredBy: 'self',
+      createdAt: new Date().toISOString()
+    };
+    createPatient(patientData);
+
+    // Create default health records
+    const defaultHealthRecords = generateDefaultHealthRecords(userId);
+    defaultHealthRecords.forEach(record => {
+      createHealthRecord(record);
+    });
+
+    // Create default prescriptions
+    const defaultPrescriptions = generateDefaultPrescriptions(userId);
+    defaultPrescriptions.forEach(prescription => {
+      createPrescription(prescription);
+    });
+
+    // Create default orders
+    const defaultOrders = generateDefaultOrders(userId);
+    defaultOrders.forEach(order => {
+      createOrder(order);
+    });
+
+    console.log(`Default data initialized for user: ${userId}`);
+    return true;
+  } catch (error) {
+    console.error('Error initializing user data:', error);
+    return false;
+  }
+};
+
+export const getUserByPhone = (phone) => {
+  try {
+    const users = readStorage('users', []);
+    const user = users.find(user => user.phone === phone);
+    
+    // If user exists but doesn't have default data, initialize it
+    if (user) {
+      const healthRecords = getHealthRecordsByPatient(user.id);
+      if (healthRecords.length === 0) {
+        initializeUserData(user.id);
+      }
+    }
+    
+    return user;
+  } catch (error) {
+    console.error('Error getting user by phone:', error);
+    return null;
+  }
+};
+
+// Doctor management
+export const createDoctor = (doctorData) => {
+  try {
+    const doctors = readStorage('doctors', []);
+    const newDoctor = {
+      id: uuidv4(),
+      ...doctorData,
+      createdAt: new Date().toISOString()
+    };
+    doctors.push(newDoctor);
+    writeStorage('doctors', doctors);
+    return { success: true, user: newDoctor };
+  } catch (error) {
+    console.error('Error creating doctor:', error);
+    return { success: false, error: 'Failed to create doctor' };
+  }
+};
+
+export const getDoctorByPhone = (phone) => {
+  try {
+    const doctors = readStorage('doctors', []);
+    return doctors.find(doctor => doctor.phone === phone);
+  } catch (error) {
+    console.error('Error getting doctor by phone:', error);
+    return null;
+  }
+};
+
+// ASHA management
+export const createAsha = (ashaData) => {
+  try {
+    const ashas = readStorage('ashas', []);
+    const newAsha = {
+      id: uuidv4(),
+      ...ashaData,
+      createdAt: new Date().toISOString()
+    };
+    ashas.push(newAsha);
+    writeStorage('ashas', ashas);
+    
+    // Initialize default ASHA data
+    initializeAshaData(newAsha.id);
+    
+    return { success: true, user: newAsha };
+  } catch (error) {
+    console.error('Error creating ASHA:', error);
+    return { success: false, error: 'Failed to create ASHA' };
+  }
+};
+
+export const getAshaByPhone = (phone) => {
+  try {
+    const ashas = readStorage('ashas', []);
+    return ashas.find(asha => asha.phone === phone);
+  } catch (error) {
+    console.error('Error getting ASHA by phone:', error);
+    return null;
+  }
+};
+
+// Patient management
+export const createPatient = (patientData) => {
+  try {
+    const patients = readStorage('patients', []);
+    const newPatient = {
+      id: uuidv4(),
+      ...patientData,
+      createdAt: new Date().toISOString()
+    };
+    patients.push(newPatient);
+    writeStorage('patients', patients);
+    return { success: true, patient: newPatient };
+  } catch (error) {
+    console.error('Error creating patient:', error);
+    return { success: false, error: 'Failed to create patient' };
+  }
+};
+
+export const getPatients = () => {
+  try {
+    return readStorage('patients', []);
+  } catch (error) {
+    console.error('Error getting patients:', error);
+    return [];
+  }
+};
+
+export const getPatientsByOwner = (ownerRole, ownerId) => {
+  try {
+    const patients = readStorage('patients', []);
+    return patients.filter(patient => 
+      patient.ownerRole === ownerRole && patient.ownerId === ownerId
+    );
+  } catch (error) {
+    console.error('Error getting patients by owner:', error);
+    return [];
+  }
+};
+
+// Health records management
+export const createHealthRecord = (recordData) => {
+  try {
+    const records = readStorage('healthRecords', []);
+    const newRecord = {
+      id: uuidv4(),
+      ...recordData,
+      createdAt: new Date().toISOString()
+    };
+    records.push(newRecord);
+    writeStorage('healthRecords', records);
+    return { success: true, record: newRecord };
+  } catch (error) {
+    console.error('Error creating health record:', error);
+    return { success: false, error: 'Failed to create health record' };
+  }
+};
+
+export const getHealthRecordsByPatient = (patientId) => {
+  try {
+    const records = readStorage('healthRecords', []);
+    const userRecords = records.filter(record => record.patientId === patientId);
+    
+    // If no records found and this is a valid user, ensure default data exists
+    if (userRecords.length === 0 && patientId) {
+      const users = readStorage('users', []);
+      const userExists = users.find(user => user.id === patientId);
+      if (userExists) {
+        initializeUserData(patientId);
+        // Return the newly created records
+        return readStorage('healthRecords', []).filter(record => record.patientId === patientId);
+      }
+    }
+    
+    return userRecords;
+  } catch (error) {
+    console.error('Error getting health records by patient:', error);
+    return [];
+  }
+};
+
+// Messages management
+export const createMessage = (messageData) => {
+  try {
+    const messages = readStorage('messages', []);
+    const newMessage = {
+      id: uuidv4(),
+      ...messageData,
+      createdAt: new Date().toISOString()
+    };
+    messages.push(newMessage);
+    writeStorage('messages', messages);
+    return newMessage;
+  } catch (error) {
+    console.error('Error creating message:', error);
+    return null;
+  }
+};
+
+export const getMessagesByRoom = (roomId) => {
+  try {
+    const messages = readStorage('messages', []);
+    return messages.filter(message => message.roomId === roomId);
+  } catch (error) {
+    console.error('Error getting messages by room:', error);
+    return [];
+  }
+};
+
+// Prescriptions management
+export const createPrescription = (prescriptionData) => {
+  try {
+    const prescriptions = readStorage('prescriptions', []);
+    const newPrescription = {
+      id: uuidv4(),
+      ...prescriptionData,
+      createdAt: new Date().toISOString()
+    };
+    prescriptions.push(newPrescription);
+    writeStorage('prescriptions', prescriptions);
+    return { success: true, prescription: newPrescription };
+  } catch (error) {
+    console.error('Error creating prescription:', error);
+    return { success: false, error: 'Failed to create prescription' };
+  }
+};
+
+export const getPrescriptionsByPatient = (patientId) => {
+  try {
+    const prescriptions = readStorage('prescriptions', []);
+    const userPrescriptions = prescriptions.filter(prescription => prescription.patientId === patientId);
+    
+    // If no prescriptions found and this is a valid user, ensure default data exists
+    if (userPrescriptions.length === 0 && patientId) {
+      const users = readStorage('users', []);
+      const userExists = users.find(user => user.id === patientId);
+      if (userExists) {
+        initializeUserData(patientId);
+        // Return the newly created prescriptions
+        return readStorage('prescriptions', []).filter(prescription => prescription.patientId === patientId);
+      }
+    }
+    
+    return userPrescriptions;
+  } catch (error) {
+    console.error('Error getting prescriptions by patient:', error);
+    return [];
+  }
+};
+
+// Visits management
+export const createVisit = (visitData) => {
+  try {
+    const visits = readStorage('visits', []);
+    const newVisit = {
+      id: uuidv4(),
+      roomId: `room-${uuidv4()}`,
+      ...visitData,
+      createdAt: new Date().toISOString()
+    };
+    visits.push(newVisit);
+    writeStorage('visits', visits);
+    return newVisit;
+  } catch (error) {
+    console.error('Error creating visit:', error);
+    return null;
+  }
+};
+
+export const getWaitingVisits = () => {
+  try {
+    const visits = readStorage('visits', []);
+    return visits.filter(visit => visit.status === 'waiting');
+  } catch (error) {
+    console.error('Error getting waiting visits:', error);
+    return [];
+  }
+};
+
+export const updateVisit = (visitId, updates) => {
+  try {
+    const visits = readStorage('visits', []);
+    const visitIndex = visits.findIndex(visit => visit.id === visitId);
+    
+    if (visitIndex !== -1) {
+      visits[visitIndex] = { ...visits[visitIndex], ...updates };
+      writeStorage('visits', visits);
+      return visits[visitIndex];
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error updating visit:', error);
+    return null;
+  }
+};
+
+// Doctor stats management
+export const updateDoctorStats = (doctorId, stats) => {
+  try {
+    const doctorStats = readStorage('doctorStats', {});
+    
+    if (!doctorStats[doctorId]) {
+      doctorStats[doctorId] = {
+        attendedCount: 0,
+        totalVisits: 0,
+        lastUpdated: new Date().toISOString()
+      };
+    }
+    
+    doctorStats[doctorId] = {
+      ...doctorStats[doctorId],
+      ...stats,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    writeStorage('doctorStats', doctorStats);
+    return doctorStats[doctorId];
+  } catch (error) {
+    console.error('Error updating doctor stats:', error);
+    return null;
+  }
+};
+
+// Cart management
+export const getCart = () => {
+  try {
+    return readStorage('cart', []);
+  } catch (error) {
+    console.error('Error getting cart:', error);
+    return [];
+  }
+};
+
+export const addToCart = (medicine) => {
+  try {
+    const cart = getCart();
+    const existingItem = cart.find(item => item.medicineId === medicine.id);
+    
+    if (existingItem) {
+      existingItem.quantity += 1;
+    } else {
+      cart.push({
+        medicineId: medicine.id,
+        medicine: medicine,
+        quantity: 1
+      });
+    }
+    
+    writeStorage('cart', cart);
+    return true;
+  } catch (error) {
+    console.error('Error adding to cart:', error);
+    return false;
+  }
+};
+
+export const clearCart = () => {
+  try {
+    writeStorage('cart', []);
+    return true;
+  } catch (error) {
+    console.error('Error clearing cart:', error);
+    return false;
+  }
+};
+
+// Orders management
+export const createOrder = (orderData) => {
+  try {
+    const orders = readStorage('orders', []);
+    const newOrder = {
+      id: uuidv4(),
+      ...orderData,
+      createdAt: new Date().toISOString()
+    };
+    orders.push(newOrder);
+    writeStorage('orders', orders);
+    return { success: true, order: newOrder };
+  } catch (error) {
+    console.error('Error creating order:', error);
+    return { success: false, error: 'Failed to create order' };
+  }
+};
+
+export const getOrders = () => {
+  try {
+    return readStorage('orders', []);
+  } catch (error) {
+    console.error('Error getting orders:', error);
+    return [];
+  }
+};
+
+// Medicines management
+export const getMedicines = () => {
+  try {
+    return readStorage('medicines', []);
+  } catch (error) {
+    console.error('Error getting medicines:', error);
+    return [];
+  }
+};
+
+// Enhanced messaging functions
+export const getMessagesBetweenUsers = (userId1, userId2) => {
+  try {
+    const messages = readStorage('messages', []);
+    return messages.filter(message => 
+      (message.senderId === userId1 && message.receiverId === userId2) ||
+      (message.senderId === userId2 && message.receiverId === userId1)
+    ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  } catch (error) {
+    console.error('Error getting messages between users:', error);
+    return [];
+  }
+};
+
+export const createMessageBetweenUsers = (senderId, receiverId, text, senderRole) => {
+  try {
+    const messageData = {
+      senderId,
+      receiverId,
+      text: text.trim(),
+      senderRole,
+      createdAt: new Date().toISOString()
+    };
+    return createMessage(messageData);
+  } catch (error) {
+    console.error('Error creating message between users:', error);
+    return null;
+  }
+};
+
+// Pharmacy management functions
+export const createPharmacy = (pharmacyData) => {
+  try {
+    const pharmacies = readStorage('pharmacies', []);
+    const newPharmacy = {
+      id: uuidv4(),
+      ...pharmacyData,
+      createdAt: new Date().toISOString()
+    };
+    pharmacies.push(newPharmacy);
+    writeStorage('pharmacies', pharmacies);
+    return { success: true, pharmacy: newPharmacy };
+  } catch (error) {
+    console.error('Error creating pharmacy:', error);
+    return { success: false, error: 'Failed to create pharmacy' };
+  }
+};
+
+export const getPharmacies = () => {
+  try {
+    return readStorage('pharmacies', []);
+  } catch (error) {
+    console.error('Error getting pharmacies:', error);
+    return [];
+  }
+};
+
+export const getPharmacyById = (pharmacyId) => {
+  try {
+    const pharmacies = readStorage('pharmacies', []);
+    return pharmacies.find(pharmacy => pharmacy.id === pharmacyId);
+  } catch (error) {
+    console.error('Error getting pharmacy by ID:', error);
+    return null;
+  }
+};
+
+export const getPharmacyByPhone = (phone) => {
+  try {
+    const pharmacies = readStorage('pharmacies', []);
+    return pharmacies.find(pharmacy => pharmacy.phone === phone);
+  } catch (error) {
+    console.error('Error getting pharmacy by phone:', error);
+    return null;
+  }
+};
+
+// Medicine management for pharmacy
+export const addMedicineToPharmacy = (pharmacyId, medicineData) => {
+  try {
+    const medicines = readStorage('pharmacyMedicines', []);
+    const newMedicine = {
+      medId: uuidv4(),
+      pharmacyId,
+      ...medicineData,
+      createdAt: new Date().toISOString()
+    };
+    medicines.push(newMedicine);
+    writeStorage('pharmacyMedicines', medicines);
+    return { success: true, medicine: newMedicine };
+  } catch (error) {
+    console.error('Error adding medicine to pharmacy:', error);
+    return { success: false, error: 'Failed to add medicine' };
+  }
+};
+
+export const getMedicinesByPharmacy = (pharmacyId) => {
+  try {
+    const medicines = readStorage('pharmacyMedicines', []);
+    return medicines.filter(medicine => medicine.pharmacyId === pharmacyId);
+  } catch (error) {
+    console.error('Error getting medicines by pharmacy:', error);
+    return [];
+  }
+};
+
+export const updatePharmacyMedicine = (medId, updates) => {
+  try {
+    const medicines = readStorage('pharmacyMedicines', []);
+    const medicineIndex = medicines.findIndex(medicine => medicine.medId === medId);
+    
+    if (medicineIndex !== -1) {
+      medicines[medicineIndex] = { ...medicines[medicineIndex], ...updates };
+      writeStorage('pharmacyMedicines', medicines);
+      return { success: true, medicine: medicines[medicineIndex] };
+    }
+    
+    return { success: false, error: 'Medicine not found' };
+  } catch (error) {
+    console.error('Error updating pharmacy medicine:', error);
+    return { success: false, error: 'Failed to update medicine' };
+  }
+};
+
+export const deletePharmacyMedicine = (medId) => {
+  try {
+    const medicines = readStorage('pharmacyMedicines', []);
+    const updatedMedicines = medicines.filter(medicine => medicine.medId !== medId);
+    writeStorage('pharmacyMedicines', updatedMedicines);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting pharmacy medicine:', error);
+    return { success: false, error: 'Failed to delete medicine' };
+  }
+};
+
+// Billing system
+export const createBill = (billData) => {
+  try {
+    const bills = readStorage('bills', []);
+    const newBill = {
+      billId: uuidv4(),
+      ...billData,
+      createdAt: new Date().toISOString()
+    };
+    bills.push(newBill);
+    writeStorage('bills', bills);
+    return { success: true, bill: newBill };
+  } catch (error) {
+    console.error('Error creating bill:', error);
+    return { success: false, error: 'Failed to create bill' };
+  }
+};
+
+export const getBillsByPharmacy = (pharmacyId) => {
+  try {
+    const bills = readStorage('bills', []);
+    return bills.filter(bill => bill.pharmacyId === pharmacyId);
+  } catch (error) {
+    console.error('Error getting bills by pharmacy:', error);
+    return [];
+  }
+};
+
+// Prescription privacy functions
+export const createPrescriptionForPharmacy = (prescriptionData, patientId) => {
+  try {
+    const prescriptions = readStorage('pharmacyPrescriptions', []);
+    const newPrescription = {
+      id: uuidv4(),
+      patientId, // Only store patient ID, not full patient info
+      ...prescriptionData,
+      createdAt: new Date().toISOString()
+    };
+    prescriptions.push(newPrescription);
+    writeStorage('pharmacyPrescriptions', prescriptions);
+    return { success: true, prescription: newPrescription };
+  } catch (error) {
+    console.error('Error creating prescription for pharmacy:', error);
+    return { success: false, error: 'Failed to create prescription' };
+  }
+};
+
+export const getPrescriptionsForPharmacy = (pharmacyId) => {
+  try {
+    const prescriptions = readStorage('pharmacyPrescriptions', []);
+    return prescriptions.filter(prescription => prescription.pharmacyId === pharmacyId);
+  } catch (error) {
+    console.error('Error getting prescriptions for pharmacy:', error);
+    return [];
+  }
+};
+
+// ==================== ASHA-PATIENT MANAGEMENT FUNCTIONS ====================
+
+// ASHA-Patient relationship management
+export const addPatientToAsha = (ashaId, patientData) => {
+  try {
+    const ashaPatients = readStorage('ashaPatients', []);
+    const newPatient = {
+      id: uuidv4(),
+      ashaId: ashaId,
+      patientId: patientData.id,
+      patientName: patientData.name,
+      patientPhone: patientData.phone,
+      patientAge: patientData.age,
+      patientVillage: patientData.village,
+      healthCondition: patientData.healthCondition || 'Not specified',
+      registeredDate: new Date().toISOString(),
+      lastVisit: null,
+      healthStatus: 'Good',
+      notes: '',
+      isSystemPatient: false // Mark as manually added by ASHA
+    };
+    
+    ashaPatients.push(newPatient);
+    writeStorage('ashaPatients', ashaPatients);
+    return { success: true, patient: newPatient };
+  } catch (error) {
+    console.error('Error adding patient to ASHA:', error);
+    return { success: false, error: 'Failed to add patient' };
+  }
+};
+
+export const getPatientsByAsha = (ashaId) => {
+  try {
+    const ashaPatients = readStorage('ashaPatients', []);
+    return ashaPatients.filter(ap => ap.ashaId === ashaId);
+  } catch (error) {
+    console.error('Error getting patients by ASHA:', error);
+    return [];
+  }
+};
+
+export const updatePatientHealthStatus = (ashaPatientId, updates) => {
+  try {
+    const ashaPatients = readStorage('ashaPatients', []);
+    const patientIndex = ashaPatients.findIndex(ap => ap.id === ashaPatientId);
+    
+    if (patientIndex !== -1) {
+      ashaPatients[patientIndex] = { 
+        ...ashaPatients[patientIndex], 
+        ...updates,
+        lastVisit: new Date().toISOString()
+      };
+      writeStorage('ashaPatients', ashaPatients);
+      return { success: true, patient: ashaPatients[patientIndex] };
+    }
+    
+    return { success: false, error: 'Patient not found' };
+  } catch (error) {
+    console.error('Error updating patient health status:', error);
+    return { success: false, error: 'Failed to update patient' };
+  }
+};
+
+// Get patient details including their health records and prescriptions
+export const getPatientFullDetails = (patientId) => {
+  try {
+    const patients = readStorage('patients', []);
+    const healthRecords = getHealthRecordsByPatient(patientId);
+    const prescriptions = getPrescriptionsByPatient(patientId);
+    const patient = patients.find(p => p.id === patientId);
+    
+    return {
+      patient,
+      healthRecords,
+      prescriptions,
+      healthRecordsCount: healthRecords.length,
+      prescriptionsCount: prescriptions.length
+    };
+  } catch (error) {
+    console.error('Error getting patient full details:', error);
+    return null;
+  }
+};
+
+// Campaign management for ASHA workers
+export const createCampaign = (campaignData) => {
+  try {
+    const campaigns = readStorage('campaigns', []);
+    const newCampaign = {
+      id: uuidv4(),
+      ...campaignData,
+      createdAt: new Date().toISOString(),
+      status: 'active'
+    };
+    campaigns.push(newCampaign);
+    writeStorage('campaigns', campaigns);
+    return { success: true, campaign: newCampaign };
+  } catch (error) {
+    console.error('Error creating campaign:', error);
+    return { success: false, error: 'Failed to create campaign' };
+  }
+};
+
+export const getCampaignsByAsha = (ashaId) => {
+  try {
+    const campaigns = readStorage('campaigns', []);
+    return campaigns.filter(campaign => campaign.ashaId === ashaId);
+  } catch (error) {
+    console.error('Error getting campaigns by ASHA:', error);
+    return [];
+  }
+};
+
+export const updateCampaign = (campaignId, updates) => {
+  try {
+    const campaigns = readStorage('campaigns', []);
+    const campaignIndex = campaigns.findIndex(c => c.id === campaignId);
+    
+    if (campaignIndex !== -1) {
+      campaigns[campaignIndex] = { ...campaigns[campaignIndex], ...updates };
+      writeStorage('campaigns', campaigns);
+      return { success: true, campaign: campaigns[campaignIndex] };
+    }
+    
+    return { success: false, error: 'Campaign not found' };
+  } catch (error) {
+    console.error('Error updating campaign:', error);
+    return { success: false, error: 'Failed to update campaign' };
+  }
+};
+
+// Get all users (for ASHA to see all registered patients)
+export const getUsers = () => {
+  try {
+    return readStorage('users', []);
+  } catch (error) {
+    console.error('Error getting users:', error);
+    return [];
+  }
+};
+
+// ==================== ENHANCED ASHA FUNCTIONS ====================
+
+// Get all patients with their full details for ASHA dashboard
+export const getAllPatientsWithDetails = (ashaId) => {
+  try {
+    const ashaPatients = getPatientsByAsha(ashaId);
+    return ashaPatients.map(ashaPatient => {
+      const fullDetails = getPatientFullDetails(ashaPatient.patientId);
+      return {
+        ...ashaPatient,
+        ...fullDetails
+      };
+    });
+  } catch (error) {
+    console.error('Error getting all patients with details:', error);
+    return [];
+  }
+};
+
+// Get patient's complete dashboard data
+export const getPatientDashboardData = (patientId) => {
+  try {
+    const healthRecords = getHealthRecordsByPatient(patientId);
+    const prescriptions = getPrescriptionsByPatient(patientId);
+    const orders = getOrders().filter(order => order.userId === patientId);
+    const patient = readStorage('patients', []).find(p => p.id === patientId);
+    const user = readStorage('users', []).find(u => u.id === patientId);
+
+    return {
+      user: user || patient,
+      healthRecords,
+      prescriptions,
+      orders,
+      healthRecordsCount: healthRecords.length,
+      prescriptionsCount: prescriptions.length,
+      ordersCount: orders.length,
+      lastActivity: getLastPatientActivity(patientId)
+    };
+  } catch (error) {
+    console.error('Error getting patient dashboard data:', error);
+    return null;
+  }
+};
+
+// Get last patient activity
+export const getLastPatientActivity = (patientId) => {
+  try {
+    const healthRecords = getHealthRecordsByPatient(patientId);
+    const prescriptions = getPrescriptionsByPatient(patientId);
+    const orders = getOrders().filter(order => order.userId === patientId);
+    
+    const allActivities = [
+      ...healthRecords.map(r => ({ type: 'health_record', date: r.createdAt })),
+      ...prescriptions.map(p => ({ type: 'prescription', date: p.createdAt })),
+      ...orders.map(o => ({ type: 'order', date: o.createdAt }))
+    ];
+    
+    if (allActivities.length === 0) return null;
+    
+    return allActivities.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  } catch (error) {
+    console.error('Error getting last patient activity:', error);
+    return null;
+  }
+};
+
+// Search medicines with advanced filtering
+export const searchMedicines = (searchTerm, filters = {}) => {
+  try {
+    const medicines = getMedicines();
+    let filtered = medicines;
+
+    // Text search
+    if (searchTerm) {
+      filtered = filtered.filter(medicine =>
+        medicine.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        medicine.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        medicine.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        medicine.description.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Category filter
+    if (filters.category && filters.category !== 'all') {
+      filtered = filtered.filter(medicine => 
+        medicine.category.toLowerCase() === filters.category.toLowerCase()
+      );
+    }
+
+    // Price range filter
+    if (filters.minPrice !== undefined) {
+      filtered = filtered.filter(medicine => medicine.price >= filters.minPrice);
+    }
+    if (filters.maxPrice !== undefined) {
+      filtered = filtered.filter(medicine => medicine.price <= filters.maxPrice);
+    }
+
+    return filtered;
+  } catch (error) {
+    console.error('Error searching medicines:', error);
+    return [];
+  }
+};
+
+// Get pharmacy statistics
+export const getPharmacyStatistics = () => {
+  try {
+    const pharmacies = getPharmacies();
+    return {
+      totalPharmacies: pharmacies.length,
+      openNow: pharmacies.filter(p => p.isOpen).length,
+      twentyFourSeven: pharmacies.filter(p => p.openTime === '24/7').length,
+      averageDistance: pharmacies.reduce((sum, p) => {
+        const dist = parseFloat(p.distance);
+        return sum + (isNaN(dist) ? 0 : dist);
+      }, 0) / pharmacies.length
+    };
+  } catch (error) {
+    console.error('Error getting pharmacy statistics:', error);
+    return null;
+  }
+};
+
+// Get ASHA worker statistics
+export const getAshaStatistics = (ashaId) => {
+  try {
+    const patients = getPatientsByAsha(ashaId);
+    const campaigns = getCampaignsByAsha(ashaId);
+    const totalHealthRecords = patients.reduce((total, patient) => 
+      total + getHealthRecordsByPatient(patient.patientId).length, 0
+    );
+
+    return {
+      totalPatients: patients.length,
+      activeCampaigns: campaigns.filter(c => c.status === 'active').length,
+      totalHealthRecords,
+      completedCampaigns: campaigns.filter(c => c.status === 'completed').length,
+      patientLocations: getPatientLocations(patients)
+    };
+  } catch (error) {
+    console.error('Error getting ASHA statistics:', error);
+    return null;
+  }
+};
+
+// Get patient locations for mapping
+export const getPatientLocations = (patients) => {
+  try {
+    const locations = {};
+    patients.forEach(patient => {
+      const village = patient.patientVillage;
+      if (village) {
+        locations[village] = (locations[village] || 0) + 1;
+      }
+    });
+    return locations;
+  } catch (error) {
+    console.error('Error getting patient locations:', error);
+    return {};
+  }
+};
+
+// Initialize default ASHA data
+export const initializeAshaData = (ashaId) => {
+  try {
+    // Create some default campaigns for new ASHA workers
+    const defaultCampaigns = [
+      {
+        id: `campaign-${ashaId}-1`,
+        title: 'Community Health Awareness',
+        description: 'General health awareness campaign for the community',
+        targetVillage: 'Demo Village',
+        campaignDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        ashaId: ashaId,
+        ashaName: 'ASHA Worker',
+        participants: 0,
+        status: 'planned',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: `campaign-${ashaId}-2`,
+        title: 'Immunization Drive',
+        description: 'Vaccination campaign for children and pregnant women',
+        targetVillage: 'Demo Village',
+        campaignDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        ashaId: ashaId,
+        ashaName: 'ASHA Worker',
+        participants: 0,
+        status: 'planned',
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    defaultCampaigns.forEach(campaign => {
+      createCampaign(campaign);
+    });
+
+    console.log(`Default ASHA data initialized for: ${ashaId}`);
+    return true;
+  } catch (error) {
+    console.error('Error initializing ASHA data:', error);
+    return false;
+  }
+};
+
+// Get medicine categories for filtering
+export const getMedicineCategories = () => {
+  try {
+    const medicines = getMedicines();
+    const categories = [...new Set(medicines.map(medicine => medicine.category))];
+    return categories.sort();
+  } catch (error) {
+    console.error('Error getting medicine categories:', error);
+    return [];
+  }
+};
+
+// Update ASHA patient record
+export const updateAshaPatient = (ashaPatientId, updates) => {
+  try {
+    const ashaPatients = readStorage('ashaPatients', []);
+    const patientIndex = ashaPatients.findIndex(ap => ap.id === ashaPatientId);
+    
+    if (patientIndex !== -1) {
+      ashaPatients[patientIndex] = { 
+        ...ashaPatients[patientIndex], 
+        ...updates 
+      };
+      writeStorage('ashaPatients', ashaPatients);
+      return { success: true, patient: ashaPatients[patientIndex] };
+    }
+    
+    return { success: false, error: 'Patient not found' };
+  } catch (error) {
+    console.error('Error updating ASHA patient:', error);
+    return { success: false, error: 'Failed to update patient' };
+  }
+};
+
+// Delete ASHA patient
+export const deleteAshaPatient = (ashaPatientId) => {
+  try {
+    const ashaPatients = readStorage('ashaPatients', []);
+    const updatedPatients = ashaPatients.filter(ap => ap.id !== ashaPatientId);
+    writeStorage('ashaPatients', updatedPatients);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting ASHA patient:', error);
+    return { success: false, error: 'Failed to delete patient' };
+  }
+};
+
+// Get campaign statistics
+export const getCampaignStatistics = (ashaId) => {
+  try {
+    const campaigns = getCampaignsByAsha(ashaId);
+    return {
+      total: campaigns.length,
+      active: campaigns.filter(c => c.status === 'active').length,
+      completed: campaigns.filter(c => c.status === 'completed').length,
+      planned: campaigns.filter(c => c.status === 'planned').length,
+      totalParticipants: campaigns.reduce((sum, c) => sum + (c.participants || 0), 0)
+    };
+  } catch (error) {
+    console.error('Error getting campaign statistics:', error);
+    return null;
+  }
+};
+
+// ==================== PATIENT AUTO-DISCOVERY FUNCTIONS ====================
+
+// Get all patient users (users with role 'user')
+export const getAllPatientUsers = () => {
+  try {
+    const users = readStorage('users', []);
+    const patients = readStorage('patients', []);
+    
+    // Combine user data with patient data
+    return users
+      .filter(user => user.role === 'user')
+      .map(user => {
+        const patientData = patients.find(p => p.id === user.id) || {};
+        return {
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+          email: user.email,
+          location: user.location,
+          age: patientData.age || 'Not specified',
+          village: patientData.village || 'Not specified',
+          healthCondition: patientData.healthCondition || 'Not specified',
+          registeredDate: user.createdAt,
+          healthStatus: 'Good', // Default status
+          registeredBy: 'system', // Mark as system registered
+          isSystemPatient: true // Flag to identify system patients
+        };
+      });
+  } catch (error) {
+    console.error('Error getting all patient users:', error);
+    return [];
+  }
+};
+
+// Get combined patients (ASHA-added + system users)
+export const getCombinedPatients = (ashaId) => {
+  try {
+    const ashaPatients = getPatientsByAsha(ashaId);
+    const systemPatients = getAllPatientUsers();
+    
+    // Combine and remove duplicates (prioritize ASHA-added patients)
+    const combined = [...ashaPatients];
+    
+    systemPatients.forEach(systemPatient => {
+      const exists = ashaPatients.some(ashaPatient => 
+        ashaPatient.patientId === systemPatient.id || 
+        ashaPatient.patientPhone === systemPatient.phone
+      );
+      
+      if (!exists) {
+        combined.push({
+          id: `system-${systemPatient.id}`,
+          ashaId: ashaId,
+          patientId: systemPatient.id,
+          patientName: systemPatient.name,
+          patientPhone: systemPatient.phone,
+          patientAge: systemPatient.age,
+          patientVillage: systemPatient.village,
+          healthCondition: systemPatient.healthCondition,
+          registeredDate: systemPatient.registeredDate,
+          lastVisit: null,
+          healthStatus: systemPatient.healthStatus,
+          notes: 'Auto-registered from system',
+          isSystemPatient: true
+        });
+      }
+    });
+    
+    return combined;
+  } catch (error) {
+    console.error('Error getting combined patients:', error);
+    return [];
+  }
+};
+
+// Migration function for existing data
+export const migrateLegacyStorage = () => {
+  try {
+    // This function can be used to migrate existing data
+    // when the storage schema changes
+    console.log('Legacy storage migration completed');
+    return true;
+  } catch (error) {
+    console.error('Error migrating legacy storage:', error);
+    return false;
+  }
+};
+
+// Get all ASHA workers
+export const getAllAshas = () => {
+  try {
+    return readStorage('ashas', []);
+  } catch (error) {
+    console.error('Error getting all ASHAs:', error);
+    return [];
+  }
+};
+
+// Get user by ID
+export const getUserById = (userId) => {
+  try {
+    const users = readStorage('users', []);
+    return users.find(user => user.id === userId);
+  } catch (error) {
+    console.error('Error getting user by ID:', error);
+    return null;
+  }
+};
+
+// Get ASHA by ID
+export const getAshaById = (ashaId) => {
+  try {
+    const ashas = readStorage('ashas', []);
+    return ashas.find(asha => asha.id === ashaId);
+  } catch (error) {
+    console.error('Error getting ASHA by ID:', error);
+    return null;
+  }
+};
