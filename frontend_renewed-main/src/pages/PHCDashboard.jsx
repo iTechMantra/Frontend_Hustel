@@ -146,17 +146,24 @@ export default function PHCDashboard() {
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {[
-            { key: "home", label: "Home", icon: <Activity className="w-4 h-4" /> },
-            { key: "beneficiaries", label: "Beneficiaries", icon: <Users className="w-4 h-4" /> },
-            { key: "workers", label: "Field Workers", icon: <Users className="w-4 h-4" /> },
-            { key: "referrals", label: "Referrals", icon: <TrendingUp className="w-4 h-4" /> },
-            { key: "coverage", label: "Coverage Reports", icon: <BarChart className="w-4 h-4" /> },
-            { key: "stock", label: "Stock Management", icon: <Package className="w-4 h-4" /> },
-            { key: "disease", label: "Disease Surveillance", icon: <AlertTriangle className="w-4 h-4" /> },
-            { key: "training", label: "Training & SOPs", icon: <FileText className="w-4 h-4" /> },
-            { key: "reports", label: "Reports & Analytics", icon: <BarChart className="w-4 h-4" /> },
-            { key: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
-            { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
+  { key: "home", label: "Home", icon: <Activity className="w-4 h-4" /> },
+  { key: "beneficiaries", label: "Beneficiaries", icon: <Users className="w-4 h-4" /> },
+  { key: "workers", label: "Field Workers", icon: <Users className="w-4 h-4" /> },
+  { key: "referrals", label: "Referrals", icon: <TrendingUp className="w-4 h-4" /> },
+  { key: "coverage", label: "Coverage Reports", icon: <BarChart className="w-4 h-4" /> },
+  { key: "stock", label: "Stock Management", icon: <Package className="w-4 h-4" /> },
+  { key: "disease", label: "Disease Surveillance", icon: <AlertTriangle className="w-4 h-4" /> },
+
+  // NEW Campaigns Section
+  { key: "campaigns", label: "Campaigns", icon: <Megaphone className="w-4 h-4" /> },
+
+  // NEW Video Consultation Section
+  { key: "video", label: "Video Consultation", icon: <Video className="w-4 h-4" /> },
+
+  { key: "training", label: "Training & SOPs", icon: <FileText className="w-4 h-4" /> },
+  { key: "reports", label: "Reports & Analytics", icon: <BarChart className="w-4 h-4" /> },
+  { key: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
+  { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
           ].map((item) => (
             <button
               key={item.key}
