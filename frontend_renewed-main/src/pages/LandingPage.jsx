@@ -179,8 +179,7 @@ export default function LandingPage() {
           <h1 className="text-5xl font-extrabold text-gray-900 mb-6">
             {translate("E-Sannidhi")}{" "}
             <span className="bg-gradient-to-r from-pink-500 via-purple-500 to-teal-500 bg-clip-text text-transparent">
-              {translate("Healthcare Starts\n")}
-              {translate("\n with You")}
+              {translate("Healthcare Starts with You")}
             </span>
           </h1>
           <p className="text-lg md:text-xl text-gray-700 mb-10 leading-relaxed">
@@ -197,19 +196,8 @@ export default function LandingPage() {
             >
               {translate("Get Started Today")}
             </button>
-            <select
-  value={lang}
-  onChange={(e) => {
-    setLanguage(e.target.value);
-    setLang(e.target.value);
-  }}
-  className="border-2 border-gray-300 hover:border-pink-500 text-gray-700 font-semibold py-3 px-4 rounded-xl transition-all duration-300 bg-white hover:bg-pink-50"
->
-  <option value="en">English</option>
-  <option value="pa">ਪੰਜਾਬੀ</option>
-  <option value="hi">हिंदी</option>
-  <option value="kn">ಕನ್ನಡ</option>
-</select>
+           
+ 
 
           </div>
         </div>

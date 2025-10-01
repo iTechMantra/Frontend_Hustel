@@ -77,6 +77,17 @@ const dictionaries = {
     'Medicine Stock': 'Medicine Stock',
     'Community Trends': 'Community Trends',
     'Feedback': 'Feedback',
+
+    "E-Sannidhi Healthcare Starts with You": "E-Sannidhi Healthcare Starts with You",
+  "Empowering ASHA, ANM, PHC staff & patients with offline-first tools, reminders, and secure consultations.": 
+    "Empowering ASHA, ANM, PHC staff & patients with offline-first tools, reminders, and secure consultations.",
+
+  "Key Features": "Key Features",
+  "Built for ASHAs, ANMs, PHC staff, and patients in rural India.": 
+    "Built for ASHAs, ANMs, PHC staff, and patients in rural India.",
+
+  "Select your role to see your personalized healthcare dashboard.": 
+    "Select your role to see your personalized healthcare dashboard."
   },
 
   pa: {
@@ -151,6 +162,19 @@ const dictionaries = {
     'Medicine Stock': 'ਦਵਾਈ ਸਟਾਕ',
     'Community Trends': 'ਭਾਈਚਾਰਕ ਰੁਝਾਨ',
     'Feedback': 'ਫੀਡਬੈਕ',
+
+
+      "E-Sannidhi Healthcare Starts with You": "ਈ-ਸੰਨਿਧੀ ਸਿਹਤ ਸੇਵਾ ਤੁਹਾਡੇ ਨਾਲ ਸ਼ੁਰੂ ਹੁੰਦੀ ਹੈ",
+  "Empowering ASHA, ANM, PHC staff & patients with offline-first tools, reminders, and secure consultations.": 
+    "ਆਸ਼ਾ, ਏਐਨਐਮ, ਪੀਐਚਸੀ ਸਟਾਫ ਅਤੇ ਮਰੀਜ਼ਾਂ ਨੂੰ ਆਫਲਾਈਨ-ਪਹਿਲਾਂ ਟੂਲ, ਯਾਦ ਦਿਹਾਾਣੀਆਂ ਅਤੇ ਸੁਰੱਖਿਅਤ ਸਲਾਹਾਂ ਨਾਲ ਸਸ਼ਕਤ ਕਰਨਾ।",
+
+  "Key Features": "ਮੁੱਖ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ",
+  "Built for ASHAs, ANMs, PHC staff, and patients in rural India.": 
+    "ਭਾਰਤ ਦੇ ਪਿੰਡਾਂ ਵਿੱਚ ਆਸ਼ਾ, ਏਐਨਐਮ, ਪੀਐਚਸੀ ਸਟਾਫ ਅਤੇ ਮਰੀਜ਼ਾਂ ਲਈ ਬਣਾਇਆ ਗਿਆ।",
+
+  "Select your role to see your personalized healthcare dashboard.": 
+    "ਆਪਣਾ ਭੂਮਿਕਾ ਚੁਣੋ ਤਾਂ ਜੋ ਆਪਣਾ ਨਿੱਜੀ ਸਿਹਤ ਡੈਸ਼ਬੋਰਡ ਵੇਖ ਸਕੋ।"
+
   },
 
   hi: {
@@ -196,7 +220,7 @@ const dictionaries = {
 
     // Landing / Hero
     'Healthcare': 'स्वास्थ्य सेवा',
-    'Healthcare Starts with You': 'स्वास्थ्य सेवा की शुरुआत आपसे होती है',
+    'Healthcare Starts with You': 'स्वास्थ्य सेवा की शुरुआत आपसे',
     'Healthcare Reimagined': 'स्वास्थ्य सेवा का नया रूप',
     'Secure & Private': 'सुरक्षित और निजी',
     '24/7 Available': '24/7 उपलब्ध',
@@ -225,6 +249,17 @@ const dictionaries = {
     'Medicine Stock': 'दवा भंडार',
     'Community Trends': 'समुदाय रुझान',
     'Feedback': 'प्रतिक्रिया',
+
+    "E-Sannidhi Healthcare Starts with You": "ई-सन्निधि स्वास्थ्य सेवा आपकी भागीदारी से ",
+  "Empowering ASHA, ANM, PHC staff & patients with offline-first tools, reminders, and secure consultations.": 
+    "आशा, एएनएम, पीएचसी स्टाफ और मरीजों को ऑफलाइन-फर्स्ट टूल्स, रिमाइंडर और सुरक्षित परामर्श के साथ सक्षम बनाना।",
+
+  "Key Features": "मुख्य विशेषताएं",
+  "Built for ASHAs, ANMs, PHC staff, and patients in rural India.": 
+    "ग्रामीण भारत में आशा, एएनएम, पीएचसी स्टाफ और मरीजों के लिए बनाया गया।",
+
+  "Select your role to see your personalized healthcare dashboard.": 
+    "अपनी भूमिका चुनें और अपना व्यक्तिगत स्वास्थ्य डैशबोर्ड देखें।"
   },
 
   kn: {
@@ -270,7 +305,7 @@ const dictionaries = {
 
     // Landing / Hero
     'Healthcare': 'ಆರೋಗ್ಯ ಸೇವೆ',
-    'Healthcare Starts with You': 'ಆರೋಗ್ಯ ಸೇವೆ ನಿಮ್ಮಿಂದ ಪ್ರಾರಂಭವಾಗುತ್ತದೆ',
+    'Healthcare Starts with You': 'ಆರೋಗ್ಯ ಸೇವೆ ನಿಮ್ಮಿಂದ ',
     'Healthcare Reimagined': 'ಆರೋಗ್ಯ ಸೇವೆಯ ಹೊಸ ರೂಪ',
     'Secure & Private': 'ಭದ್ರ ಮತ್ತು ಖಾಸಗಿ',
     '24/7 Available': '24/7 ಲಭ್ಯವಿದೆ',
@@ -299,6 +334,17 @@ const dictionaries = {
     'Medicine Stock': 'ಔಷಧಿ ಸ್ಟಾಕ್',
     'Community Trends': 'ಸಮುದಾಯ ಪ್ರವೃತ್ತಿಗಳು',
     'Feedback': 'ಪ್ರತಿಕ್ರಿಯೆ',
+
+     "E-Sannidhi Healthcare Starts with You": "ಇ-ಸನ್ನಿಧಿ ಆರೋಗ್ಯ ಸೇವೆ ನಿಮ್ಮಿಂದ ",
+  "Empowering ASHA, ANM, PHC staff & patients with offline-first tools, reminders, and secure consultations.": 
+    "ಆಶಾ, ಎಎನ್‌ಎಂ, ಪಿಎಚ್‌ಸಿ ಸಿಬ್ಬಂದಿ ಮತ್ತು ರೋಗಿಗಳನ್ನು ಆಫ್‌ಲೈನ್-ಮೊದಲು ಸಾಧನಗಳು, ರಿಮೈಂಡರ್‌ಗಳು ಮತ್ತು ಸುರಕ್ಷಿತ ಸಲಹೆಗಳ ಮೂಲಕ ಶಕ್ತಗೊಳಿಸಲಾಗುತ್ತಿದೆ.",
+
+  "Key Features": "ಮುಖ್ಯ ವೈಶಿಷ್ಟ್ಯಗಳು",
+  "Built for ASHAs, ANMs, PHC staff, and patients in rural India.": 
+    "ಗ್ರಾಮೀಣ ಭಾರತದ ಆಶಾ, ಎಎನ್‌ಎಂ, ಪಿಎಚ್‌ಸಿ ಸಿಬ್ಬಂದಿ ಮತ್ತು ರೋಗಿಗಳಿಗಾಗಿ ನಿರ್ಮಿಸಲಾಗಿದೆ.",
+
+  "Select your role to see your personalized healthcare dashboard.": 
+    "ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ಆರೋಗ್ಯ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ನೋಡಲು ನಿಮ್ಮ ಪಾತ್ರವನ್ನು ಆರಿಸಿ."
   },
 };
 

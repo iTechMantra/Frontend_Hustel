@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AiOutlineWifi, AiOutlineGlobal, AiOutlineHeart } from 'react-icons/ai';
-import { translate, getToggleLanguage, getToggleLanguageName } from '../services/translationService';
+import { translate, getAvailableLanguages, setLanguage, getCurrentLanguage } from '../services/translationService';
 
 export default function TopNav() {
-  const navigate = useNavigate(); // Added
+  const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
 
-  const handleLanguageToggle = () => {
-    const newLang = getToggleLanguage();
-    localStorage.setItem('appLanguage', newLang);
+  const availableLangs = getAvailableLanguages();
+  const currentLang = getCurrentLanguage();
+
+  const handleLanguageChange = (langCode) => {
+    setLanguage(langCode);
     window.location.reload();
   };
 
@@ -20,7 +23,7 @@ export default function TopNav() {
         {/* Logo & Tagline */}
         <div
           className="flex items-center gap-3 cursor-pointer"
-          onClick={() => navigate('/')} // Navigate to landing page
+          onClick={() => navigate('/')}
         >
           <div className="w-12 h-12 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md">
             <AiOutlineHeart className="text-3xl"/>
@@ -47,14 +50,35 @@ export default function TopNav() {
             <span>{isOnline ? translate('Online') : translate('Offline')}</span>
           </div>
 
-          {/* Language Toggle */}
-          <button
-            onClick={handleLanguageToggle}
-            className="flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-          >
-            <AiOutlineGlobal className="mr-1" />
-            {getToggleLanguageName() || 'EN'}
-          </button>
+          {/* Language Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setLangMenuOpen(!langMenuOpen)}
+              className="flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+            >
+              <AiOutlineGlobal className="mr-1" />
+              {
+                availableLangs.find((l) => l.code === currentLang)?.nativeName ||
+                'EN'
+              }
+            </button>
+
+            {langMenuOpen && (
+              <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                {availableLangs.map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={() => handleLanguageChange(lang.code)}
+                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
+                      lang.code === currentLang ? 'bg-gray-50 font-semibold' : ''
+                    }`}
+                  >
+                    {lang.nativeName}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>
