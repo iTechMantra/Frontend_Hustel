@@ -1,12 +1,11 @@
-// src/pages/PHCDashboard.jsx
+// Add these imports at the top
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { translate } from "../services/translationService";
 import { logout, getCurrentUser } from "../services/authService";
 import JitsiMeetingWrapper from "../components/JitsiMeetingWrapper";
 import { LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
-import { Calendar, Users, Activity, AlertTriangle, Package, TrendingUp, FileText, Video, Bell, Settings, LogOut, Phone, MessageSquare, MapPin, Clock, Download, Filter, Search, Plus, Eye, Edit, Trash2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
-
+import { Calendar, Users, Activity, AlertTriangle, Package, TrendingUp, FileText, Video, Bell, Settings, LogOut, Phone, MessageSquare, MapPin, Clock, Download, Filter, Search, Plus, Eye, Edit, Trash2, CheckCircle, XCircle, AlertCircle, Camera } from "lucide-react";
 // Expanded Dummy Data
 const BENEFICIARIES = [
   { id: "b1", type: "Pregnant Women", total: 120, highRisk: 25, registered: 110, anc1: 105, anc4: 85, institutional: 98 },
@@ -101,12 +100,117 @@ const PERFORMANCE_METRICS = [
   { subject: "Data Quality", A: 82, B: 90, fullMark: 100 },
 ];
 
+// Add this with your other dummy data arrays
+const CAMPAIGNS = [
+  { 
+    id: "c1", 
+    title: "ANC Immunization Drive", 
+    type: "Immunization", 
+    date: "2025-10-15", 
+    location: "Rampur Village", 
+    responsible: "ANM - Rekha Singh", 
+    status: "upcoming", 
+    description: "Routine immunization for pregnant women including TT vaccination",
+    beneficiaries: 45,
+    duration: "4 hours"
+  },
+  { 
+    id: "c2", 
+    title: "Malaria Awareness Camp", 
+    type: "Awareness", 
+    date: "2025-10-20", 
+    location: "Laxmipur Village", 
+    responsible: "ASHA - Sita Devi", 
+    status: "upcoming", 
+    description: "Distribution of mosquito nets and awareness about malaria prevention",
+    beneficiaries: 120,
+    duration: "6 hours"
+  },
+  { 
+    id: "c3", 
+    title: "Nutrition & Breastfeeding Week", 
+    type: "Nutrition", 
+    date: "2025-10-05", 
+    location: "PHC Balarampur", 
+    responsible: "PHC Doctor", 
+    status: "ongoing", 
+    description: "Counseling on nutrition and breastfeeding practices for mothers",
+    beneficiaries: 85,
+    duration: "1 week"
+  },
+  { 
+    id: "c4", 
+    title: "Diabetes Screening Camp", 
+    type: "Screening", 
+    date: "2025-09-25", 
+    location: "Shivnagar Village", 
+    responsible: "ANM - Geeta Kumari", 
+    status: "completed", 
+    description: "Blood sugar screening for elderly population",
+    beneficiaries: 67,
+    duration: "5 hours"
+  },
+  { 
+    id: "c5", 
+    title: "Child Health Checkup", 
+    type: "Health Checkup", 
+    date: "2025-10-12", 
+    location: "Krishnapur Village", 
+    responsible: "ASHA - Sunita Devi", 
+    status: "upcoming", 
+    description: "Comprehensive health checkup for children under 5 years",
+    beneficiaries: 90,
+    duration: "5 hours"
+  }
+];
+
 export default function PHCDashboard() {
   const [user] = useState({ name: "Dr. PHC Admin", role: "phc" });
   const [section, setSection] = useState("home");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedNotification, setSelectedNotification] = useState(null);
+  // Add these new states
+  const [videoConsultationActive, setVideoConsultationActive] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState("all");
+
+  // Add these functions
+  const startVideoConsultation = () => {
+    const roomName = `esannidhi-${user.role}-${Date.now()}`;
+    setCurrentRoom(roomName);
+    setVideoConsultationActive(true);
+  };
+
+  const endVideoConsultation = () => {
+    setVideoConsultationActive(false);
+    setCurrentRoom("");
+  };
+
+    const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const getCampaignStatusColor = (status) => {
+    switch(status) {
+      case "upcoming": return "bg-blue-100 text-blue-700";
+      case "ongoing": return "bg-green-100 text-green-700";
+      case "completed": return "bg-gray-100 text-gray-700";
+      default: return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  const getCampaignTypeColor = (type) => {
+    switch(type) {
+      case "Immunization": return "bg-purple-100 text-purple-700";
+      case "Awareness": return "bg-orange-100 text-orange-700";
+      case "Nutrition": return "bg-pink-100 text-pink-700";
+      case "Screening": return "bg-cyan-100 text-cyan-700";
+      case "Health Checkup": return "bg-indigo-100 text-indigo-700";
+      default: return "bg-gray-100 text-gray-700";
+    }
+  };
 
   const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#a4de6c", "#d0ed57"];
 
@@ -145,46 +249,51 @@ export default function PHCDashboard() {
           <p className="text-green-100 text-xs mt-1">Supervisory Control</p>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {[
-  { key: "home", label: "Home", icon: <Activity className="w-4 h-4" /> },
-  { key: "beneficiaries", label: "Beneficiaries", icon: <Users className="w-4 h-4" /> },
-  { key: "workers", label: "Field Workers", icon: <Users className="w-4 h-4" /> },
-  { key: "referrals", label: "Referrals", icon: <TrendingUp className="w-4 h-4" /> },
-  { key: "coverage", label: "Coverage Reports", icon: <BarChart className="w-4 h-4" /> },
-  { key: "stock", label: "Stock Management", icon: <Package className="w-4 h-4" /> },
-  { key: "disease", label: "Disease Surveillance", icon: <AlertTriangle className="w-4 h-4" /> },
-
-  // NEW Campaigns Section
-  { key: "campaigns", label: "Campaigns", icon: <Megaphone className="w-4 h-4" /> },
-
-  // NEW Video Consultation Section
-  { key: "video", label: "Video Consultation", icon: <Video className="w-4 h-4" /> },
-
-  { key: "training", label: "Training & SOPs", icon: <FileText className="w-4 h-4" /> },
-  { key: "reports", label: "Reports & Analytics", icon: <BarChart className="w-4 h-4" /> },
-  { key: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
-  { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
-          ].map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setSection(item.key)}
-              className={`w-full text-left px-3 py-2.5 rounded-lg font-medium transition-all flex items-center gap-3 text-sm ${
-                section === item.key 
-                  ? "bg-green-600 text-white shadow-md" 
-                  : "hover:bg-green-50 text-gray-700"
-              }`}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
+  {[
+    { key: "home", label: "Home", icon: <Activity className="w-4 h-4" /> },
+    { key: "beneficiaries", label: "Beneficiaries", icon: <Users className="w-4 h-4" /> },
+    { key: "workers", label: "Field Workers", icon: <Users className="w-4 h-4" /> },
+    { key: "referrals", label: "Referrals", icon: <TrendingUp className="w-4 h-4" /> },
+    { key: "coverage", label: "Coverage Reports", icon: <BarChart className="w-4 h-4" /> },
+    { key: "stock", label: "Stock Management", icon: <Package className="w-4 h-4" /> },
+    { key: "disease", label: "Disease Surveillance", icon: <AlertTriangle className="w-4 h-4" /> },
+    // Add Video Consultation menu item
+    { key: "video-consultation", label: "Video Consultation", icon: <Camera className="w-4 h-4" /> },
+    // Add Campaigns menu item
+    { key: "campaigns", label: "Campaigns", icon: <Calendar className="w-4 h-4" /> },
+    { key: "training", label: "Training & SOPs", icon: <FileText className="w-4 h-4" /> },
+    { key: "reports", label: "Reports & Analytics", icon: <BarChart className="w-4 h-4" /> },
+    { key: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
+    { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
+  ].map((item) => (
+    <button
+      key={item.key}
+      onClick={() => {
+        setSection(item.key);
+        if (item.key !== "video-consultation") {
+          setVideoConsultationActive(false);
+        }
+      }}
+      className={`w-full text-left px-3 py-2.5 rounded-lg font-medium transition-all flex items-center gap-3 text-sm ${
+        section === item.key 
+          ? "bg-green-600 text-white shadow-md" 
+          : "hover:bg-green-50 text-gray-700"
+      }`}
+    >
+      {item.icon}
+      <span>{item.label}</span>
+    </button>
+  ))}
+</nav>
         <div className="p-3 border-t">
           <div className="mb-3 p-3 bg-blue-50 rounded-lg">
             <p className="text-xs font-semibold text-blue-900">{user.name}</p>
             <p className="text-xs text-blue-700">PHC Administrator</p>
           </div>
-          <button className="w-full px-3 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center justify-center gap-2 text-sm font-medium">
+          <button 
+            onClick={handleLogout}
+            className="w-full px-3 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center justify-center gap-2 text-sm font-medium"
+          >
             <LogOut className="w-4 h-4" /> Logout
           </button>
         </div>
@@ -656,7 +765,293 @@ export default function PHCDashboard() {
               </div>
             </div>
           )}
+ {/* CAMPAIGNS */}
+{section === "campaigns" && (
+  <div className="space-y-6">
+    <div className="bg-white p-6 rounded-xl shadow-md">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-semibold flex items-center gap-2">
+          <Calendar className="w-6 h-6 text-green-600" />
+          Health Campaigns & Drives
+        </h3>
+        <div className="flex gap-3">
+          <select 
+            className="px-4 py-2 border rounded-lg text-sm"
+            value={campaignFilter}
+            onChange={(e) => setCampaignFilter(e.target.value)}
+          >
+            <option value="all">All Campaigns</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="ongoing">Ongoing</option>
+            <option value="completed">Completed</option>
+          </select>
+          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm">
+            <Plus className="w-4 h-4" /> New Campaign
+          </button>
+        </div>
+      </div>
 
+      <div className="grid gap-4">
+        {CAMPAIGNS
+          .filter(campaign => campaignFilter === "all" || campaign.status === campaignFilter)
+          .map((campaign) => (
+            <div key={campaign.id} className="border-2 border-gray-200 p-5 rounded-xl hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h4 className="font-bold text-lg text-gray-800">{campaign.title}</h4>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${getCampaignStatusColor(campaign.status)}`}>
+                      {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                    </span>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${getCampaignTypeColor(campaign.type)}`}>
+                      {campaign.type}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 mb-3">{campaign.description}</p>
+                  
+                  <div className="grid md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Date & Time</p>
+                      <p className="font-semibold">{campaign.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Location</p>
+                      <p className="font-semibold flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {campaign.location}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Responsible Staff</p>
+                      <p className="font-semibold">{campaign.responsible}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Expected Beneficiaries</p>
+                      <p className="font-semibold">{campaign.beneficiaries}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <button className="p-2 hover:bg-blue-50 rounded-lg">
+                    <Eye className="w-5 h-5 text-blue-600" />
+                  </button>
+                  <button className="p-2 hover:bg-green-50 rounded-lg">
+                    <Edit className="w-5 h-5 text-green-600" />
+                  </button>
+                  <button className="p-2 hover:bg-red-50 rounded-lg">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex justify-between items-center pt-4 border-t">
+                <div className="flex items-center gap-4 text-sm text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Duration: {campaign.duration}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {campaign.status === "upcoming" && (
+                    <>
+                      <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                        Start Campaign
+                      </button>
+                      <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                        Reschedule
+                      </button>
+                    </>
+                  )}
+                  {campaign.status === "ongoing" && (
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                      Update Progress
+                    </button>
+                  )}
+                  {campaign.status === "completed" && (
+                    <button className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm">
+                      View Report
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+      </div>
+
+      {/* Campaign Statistics */}
+      <div className="mt-8 grid md:grid-cols-4 gap-4">
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <p className="text-2xl font-bold text-blue-600">{CAMPAIGNS.filter(c => c.status === 'upcoming').length}</p>
+          <p className="text-sm text-gray-600">Upcoming</p>
+        </div>
+        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+          <p className="text-2xl font-bold text-green-600">{CAMPAIGNS.filter(c => c.status === 'ongoing').length}</p>
+          <p className="text-sm text-gray-600">Ongoing</p>
+        </div>
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <p className="text-2xl font-bold text-gray-600">{CAMPAIGNS.filter(c => c.status === 'completed').length}</p>
+          <p className="text-sm text-gray-600">Completed</p>
+        </div>
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <p className="text-2xl font-bold text-purple-600">{CAMPAIGNS.length}</p>
+          <p className="text-sm text-gray-600">Total Campaigns</p>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* VIDEO CONSULTATION */}
+{section === "video-consultation" && (
+  <div className="space-y-6">
+    {!videoConsultationActive ? (
+      <div className="bg-white p-6 rounded-xl shadow-md">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-semibold flex items-center gap-2">
+            <Camera className="w-6 h-6 text-green-600" />
+            Video Consultation
+          </h3>
+          <button 
+            onClick={startVideoConsultation}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm"
+          >
+            <Video className="w-4 h-4" /> Start New Consultation
+          </button>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="border-2 border-dashed border-gray-300 p-6 rounded-xl bg-blue-50">
+            <h4 className="font-semibold mb-3 text-gray-800">Upcoming Consultations</h4>
+            <div className="space-y-3">
+              <div className="bg-white p-4 rounded-lg border">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="font-semibold">Dr. Sharma - Patient: Radha Kumari</span>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">10:30 AM</span>
+                </div>
+                <p className="text-sm text-gray-600">Follow-up for high BP</p>
+                <p className="text-xs text-gray-500 mt-2">Today, 10:30 AM</p>
+              </div>
+              <div className="bg-white p-4 rounded-lg border">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="font-semibold">ANM Rekha - ASHA Sita Devi</span>
+                  <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">02:00 PM</span>
+                </div>
+                <p className="text-sm text-gray-600">High-risk pregnancy discussion</p>
+                <p className="text-xs text-gray-500 mt-2">Today, 02:00 PM</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-2 border-dashed border-gray-300 p-6 rounded-xl bg-green-50">
+            <h4 className="font-semibold mb-3 text-gray-800">Quick Actions</h4>
+            <div className="space-y-3">
+              <button className="w-full p-4 bg-white border-2 border-green-200 rounded-lg hover:bg-green-50 text-left">
+                <div className="flex items-center gap-3">
+                  <Video className="w-5 h-5 text-green-600" />
+                  <div>
+                    <p className="font-semibold">Join Scheduled Call</p>
+                    <p className="text-sm text-gray-600">Enter room code to join</p>
+                  </div>
+                </div>
+              </button>
+              <button className="w-full p-4 bg-white border-2 border-blue-200 rounded-lg hover:bg-blue-50 text-left">
+                <div className="flex items-center gap-3">
+                  <Users className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <p className="font-semibold">Group Consultation</p>
+                    <p className="text-sm text-gray-600">Start multi-party call</p>
+                  </div>
+                </div>
+              </button>
+              <button className="w-full p-4 bg-white border-2 border-purple-200 rounded-lg hover:bg-purple-50 text-left">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                  <div>
+                    <p className="font-semibold">Consultation History</p>
+                    <p className="text-sm text-gray-600">View past consultations</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 bg-white border-2 border-gray-200 p-6 rounded-xl">
+          <h4 className="font-semibold mb-4">Recent Consultations</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Participants</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Duration</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                <tr className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm">2025-09-28</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Dr. Verma</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="font-medium">ASHA Sita + Patient</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm">25 mins</td>
+                  <td className="px-4 py-3">
+                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">Completed</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">View Record</button>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm">2025-09-27</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">ANM Rekha</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="font-medium">PHC Doctor</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm">18 mins</td>
+                  <td className="px-4 py-3">
+                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">Completed</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">View Record</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className="bg-white p-6 rounded-xl shadow-md">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold flex items-center gap-2">
+            <Camera className="w-6 h-6 text-green-600" />
+            Live Consultation - Room: {currentRoom}
+          </h3>
+          <button 
+            onClick={endVideoConsultation}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 text-sm"
+          >
+            End Call
+          </button>
+        </div>
+        <div className="border-2 border-gray-200 rounded-lg h-96">
+          <JitsiMeetingWrapper
+            roomName={currentRoom}
+            displayName={user.name}
+            onMeetingEnd={endVideoConsultation}
+          />
+        </div>
+        </div>
+    )}
+  </div>
+)}
           {/* COVERAGE REPORTS */}
           {section === "coverage" && (
             <div className="space-y-6">

@@ -3,269 +3,88 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from '../services/authService';
 import storageService from '../services/storageService';
-// storage is now via IndexedDB service
 import { translate } from '../services/translationService';
-import AshaPatientForm from '../components/AshaPatientForm';
-import CampaignPanel from '../components/CampaignPanel';
-import TrainingContent from '../components/TrainingContent';
-import HouseholdRegister from '../components/HouseholdRegister';
-import MedicineSearch from '../components/MedicineSearch';
-import MessageVideoSection from '../components/MessageVideoSection';
-import HealthRecordUploader from '../components/HealthRecordUploader';
+import JitsiMeetingWrapper from '../components/JitsiMeetingWrapper';
+import { 
+  Users, Home, Calendar, ClipboardList, BookOpen, TrendingUp, 
+  Award, Bell, FileText, Settings, HelpCircle, LogOut, 
+  Phone, MessageSquare, Plus, Eye, Download, Activity,
+  CheckCircle, Clock, AlertCircle, MapPin, UserPlus,
+  Baby, Heart, Stethoscope, Shield, UserCheck, FileSearch
+} from 'lucide-react';
+
+// Dummy data for ASHA dashboard
+const BENEFICIARIES = [
+  { id: "b1", type: "Pregnant Women", total: 25, highRisk: 5, registered: 22, anc1: 20, anc4: 18, institutional: 21 },
+  { id: "b2", type: "Children (0-5 yrs)", total: 45, highRisk: 3, fullyImmunized: 38, partialImmunized: 5, notImmunized: 2 },
+  { id: "b3", type: "Eligible Couples", total: 18, highRisk: 2, sterilization: 4, iud: 6, pills: 5, condoms: 3 },
+  { id: "b4", type: "Adolescents", total: 32, highRisk: 4, counseled: 28, anemic: 8, normal: 24 },
+];
+
+const DUE_LIST = [
+  { id: "d1", type: "ANC Visit", patient: "Priya Sharma", date: "2025-10-05", status: "Due", priority: "High" },
+  { id: "d2", type: "Immunization", patient: "Baby Rohan", date: "2025-10-03", status: "Overdue", priority: "Critical" },
+  { id: "d3", type: "PNC Visit", patient: "Sunita Devi", date: "2025-10-07", status: "Due", priority: "Medium" },
+  { id: "d4", type: "Family Planning", patient: "Laxmi Bai", date: "2025-10-10", status: "Due", priority: "Medium" },
+  { id: "d5", type: "Growth Monitoring", patient: "Baby Aisha", date: "2025-10-04", status: "Due", priority: "High" },
+];
+
+const HOME_VISITS = [
+  { id: "v1", type: "ANC", patient: "Priya Sharma", date: "2025-09-28", status: "Completed", checklist: ["BP Check", "Weight", "Hb Test", "Counseling"] },
+  { id: "v2", type: "Immunization", patient: "Baby Rohan", date: "2025-09-29", status: "Completed", checklist: ["BCG", "OPV", "Pentavalent"] },
+  { id: "v3", type: "PNC", patient: "Sunita Devi", date: "2025-09-30", status: "Pending", checklist: ["Breastfeeding", "Nutrition", "Hygiene"] },
+  { id: "v4", type: "Newborn Care", patient: "Baby Aisha", date: "2025-10-01", status: "Scheduled", checklist: ["Weight", "Feeding", "Cord Care"] },
+];
+
+const REFERRALS = [
+  { id: "r1", date: "2025-09-28", patient: "Radha Kumari", age: 26, reason: "High BP during ANC (160/110)", to: "PHC Balarampur", status: "Pending", priority: "High" },
+  { id: "r2", date: "2025-09-27", patient: "Pooja Sharma", age: 28, reason: "Severe Anemia (Hb 6.2)", to: "ANM Rekha Singh", status: "Completed", priority: "Critical" },
+  { id: "r3", date: "2025-09-26", patient: "Mohan Das", age: 45, reason: "Persistent cough, TB Symptoms", to: "PHC Doctor", status: "In Progress", priority: "Medium" },
+];
+
+const INCENTIVES = [
+  { id: "i1", task: "ANC Registration", count: 8, amount: 800, status: "Approved", date: "2025-09-25" },
+  { id: "i2", task: "Institutional Delivery", count: 3, amount: 600, status: "Pending", date: "2025-09-28" },
+  { id: "i3", task: "Immunization", count: 12, amount: 300, status: "Approved", date: "2025-09-20" },
+  { id: "i4", task: "Family Planning", count: 5, amount: 250, status: "Approved", date: "2025-09-22" },
+];
+
+const NOTIFICATIONS = [
+  { id: "n1", date: "2025-09-30", time: "10:30 AM", priority: "High", title: "VHND Session", body: "Village Health & Nutrition Day scheduled for Oct 5 at Anganwadi Center", from: "ANM Rekha Singh", read: false },
+  { id: "n2", date: "2025-09-29", time: "02:15 PM", priority: "Medium", title: "Training Update", body: "New ANC counseling guidelines available. Please review by Oct 10.", from: "PHC Supervisor", read: false },
+  { id: "n3", date: "2025-09-28", time: "09:00 AM", priority: "High", title: "High Risk Case", body: "Priya Sharma (6 months pregnant) identified as high risk. Monitor closely.", from: "ANM", read: true },
+];
+
+const HEALTH_EDUCATION = [
+  { id: "e1", title: "ANC Counseling Guide", type: "PDF", category: "Maternal Health", size: "2.5 MB", downloads: 45 },
+  { id: "e2", title: "Newborn Care Video", type: "Video", category: "Child Health", size: "125 MB", downloads: 38 },
+  { id: "e3", title: "Nutrition Guide", type: "PDF", category: "Nutrition", size: "1.8 MB", downloads: 52 },
+  { id: "e4", title: "Family Planning Methods", type: "PDF", category: "Family Planning", size: "950 KB", downloads: 67 },
+];
+
+// Registration forms data
+const REGISTRATION_TYPES = [
+  { id: "pregnancy", label: "New Pregnancy", icon: <Heart className="w-5 h-5" />, color: "bg-pink-100 text-pink-600" },
+  { id: "infant", label: "New Infant/Birth", icon: <Baby className="w-5 h-5" />, color: "bg-blue-100 text-blue-600" },
+  { id: "child", label: "Child Registration", icon: <Users className="w-5 h-5" />, color: "bg-green-100 text-green-600" },
+  { id: "family", label: "Family Registration", icon: <UserPlus className="w-5 h-5" />, color: "bg-purple-100 text-purple-600" },
+  { id: "eligible_couple", label: "Eligible Couple", icon: <UserCheck className="w-5 h-5" />, color: "bg-orange-100 text-orange-600" },
+  { id: "scheme", label: "Scheme Enrollment", icon: <Shield className="w-5 h-5" />, color: "bg-indigo-100 text-indigo-600" },
+];
 
 export default function AshaDashboard() {
   const navigate = useNavigate();
   const [asha, setAsha] = useState(null);
   const [section, setSection] = useState('home');
-  const [patients, setPatients] = useState([]);
-  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedNotification, setSelectedNotification] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [recordsState, setRecordsState] = useState([]);
-  const [prescriptionsState, setPrescriptionsState] = useState([]);
+  const [showRegistrationModal, setShowRegistrationModal] = useState(false);
+  const [selectedRegistrationType, setSelectedRegistrationType] = useState(null);
+  const [registrationForm, setRegistrationForm] = useState({});
 
-  // Dummy patients data
-  const [dummyPatients] = useState([
-    {
-      id: 'pat_001',
-      name: 'Priya Sharma',
-      age: 28,
-      gender: 'Female',
-      phone: '+91 98765 43210',
-      village: 'Rampur',
-      photo: null,
-      healthConditions: ['Pregnancy - 6 months', 'Anemia'],
-      lastVisit: '2024-01-15',
-      nextVisit: '2024-02-15',
-      ownerId: 'asha_001',
-      ownerType: 'asha',
-      createdAt: '2023-06-15'
-    },
-    {
-      id: 'pat_002',
-      name: 'Ramesh Kumar',
-      age: 65,
-      gender: 'Male',
-      phone: '+91 87654 32109',
-      village: 'Rampur',
-      photo: null,
-      healthConditions: ['Diabetes', 'Hypertension'],
-      lastVisit: '2024-01-10',
-      nextVisit: '2024-02-10',
-      ownerId: 'asha_001',
-      ownerType: 'asha',
-      createdAt: '2023-07-20'
-    },
-    {
-      id: 'pat_003',
-      name: 'Sunita Devi',
-      age: 32,
-      gender: 'Female',
-      phone: '+91 76543 21098',
-      village: 'Rampur',
-      photo: null,
-      healthConditions: ['Pregnancy - 8 months', 'Normal'],
-      lastVisit: '2024-01-18',
-      nextVisit: '2024-01-25',
-      ownerId: 'asha_001',
-      ownerType: 'asha',
-      createdAt: '2023-08-10'
-    },
-    {
-      id: 'pat_004',
-      name: 'Vikram Singh',
-      age: 45,
-      gender: 'Male',
-      phone: '+91 65432 10987',
-      village: 'Rampur',
-      photo: null,
-      healthConditions: ['Asthma', 'Allergies'],
-      lastVisit: '2024-01-12',
-      nextVisit: '2024-02-12',
-      ownerId: 'asha_001',
-      ownerType: 'asha',
-      createdAt: '2023-09-05'
-    },
-    {
-      id: 'pat_005',
-      name: 'Laxmi Bai',
-      age: 70,
-      gender: 'Female',
-      phone: '+91 94321 09876',
-      village: 'Rampur',
-      photo: null,
-      healthConditions: ['Arthritis', 'BP Medication'],
-      lastVisit: '2024-01-08',
-      nextVisit: '2024-02-08',
-      ownerId: 'asha_001',
-      ownerType: 'asha',
-      createdAt: '2023-10-12'
-    }
-  ]);
-
-  // Dummy health records for patients
-  const [dummyHealthRecords] = useState([
-    {
-      id: 'rec_001',
-      patientId: 'pat_001',
-      title: 'Pregnancy Checkup - Month 6',
-      type: 'checkup',
-      notes: 'Regular pregnancy checkup. Fetal heartbeat normal. Blood pressure: 120/80. Weight: 58kg.',
-      fileName: 'pregnancy_checkup_jan.pdf',
-      createdAt: '2024-01-15'
-    },
-    {
-      id: 'rec_002',
-      patientId: 'pat_002',
-      title: 'Diabetes Monitoring',
-      type: 'test',
-      notes: 'Blood sugar levels: Fasting - 110 mg/dL, Postprandial - 160 mg/dL. Medication adjusted.',
-      fileName: 'diabetes_report.pdf',
-      createdAt: '2024-01-10'
-    },
-    {
-      id: 'rec_003',
-      patientId: 'pat_003',
-      title: 'Ultrasound Report',
-      type: 'scan',
-      notes: '8-month pregnancy ultrasound. Baby development normal. Expected delivery: Feb 2024.',
-      fileName: 'ultrasound_jan.pdf',
-      createdAt: '2024-01-18'
-    }
-  ]);
-
-  // Dummy prescriptions
-  const [dummyPrescriptions] = useState([
-    {
-      id: 'pres_001',
-      patientId: 'pat_001',
-      doctorName: 'Dr. Anjali Mehta',
-      text: 'Iron tablets - 1 daily\nCalcium supplements - 1 daily\nFolic acid - continue',
-      createdAt: '2024-01-15'
-    },
-    {
-      id: 'pres_002',
-      patientId: 'pat_002',
-      doctorName: 'Dr. Rajesh Kumar',
-      text: 'Metformin 500mg - 1 tablet twice daily\nGlimepride 2mg - 1 tablet morning\nRegular walking recommended',
-      createdAt: '2024-01-10'
-    }
-  ]);
-
-  // Health schemes data
-  const [healthSchemes] = useState([
-    {
-      id: 1,
-      name: 'Pradhan Mantri Matru Vandana Yojana',
-      description: 'Maternity benefit program for pregnant women',
-      icon: '🤰',
-      category: 'Maternal Health',
-      eligibility: 'Pregnant women & lactating mothers',
-      benefits: '₹5,000 in 3 installments'
-    },
-    {
-      id: 2,
-      name: 'Janani Shishu Suraksha Karyakram',
-      description: 'Free delivery and C-section services',
-      icon: '👶',
-      category: 'Childbirth',
-      eligibility: 'All pregnant women',
-      benefits: 'Free delivery care'
-    },
-    {
-      id: 3,
-      name: 'Mission Indradhanush',
-      description: 'Immunization program for children',
-      icon: '💉',
-      category: 'Immunization',
-      eligibility: 'Children under 2 years',
-      benefits: 'Free vaccination'
-    },
-    {
-      id: 4,
-      name: 'Anaemia Mukt Bharat',
-      description: 'Program to reduce anaemia prevalence',
-      icon: '🩸',
-      category: 'Nutrition',
-      eligibility: 'Children, adolescents, women',
-      benefits: 'Iron folic acid supplements'
-    }
-  ]);
-
-  // Health awareness programs
-  const [awarenessPrograms] = useState([
-    {
-      id: 1,
-      title: 'Immunization Drive',
-      description: 'Weekly immunization camp for children under 5 years',
-      date: 'Every Tuesday',
-      time: '10:00 AM - 2:00 PM',
-      location: 'Rampur Health Center',
-      icon: '💉',
-      status: 'Active'
-    },
-    {
-      id: 2,
-      title: 'Prenatal Care Workshop',
-      description: 'Education on pregnancy care and nutrition',
-      date: '15th February 2024',
-      time: '11:00 AM - 1:00 PM',
-      location: 'Community Hall',
-      icon: '🤰',
-      status: 'Upcoming'
-    },
-    {
-      id: 3,
-      title: 'Diabetes Screening Camp',
-      description: 'Free blood sugar testing and consultation',
-      date: '20th January 2024',
-      time: '9:00 AM - 4:00 PM',
-      location: 'Rampur Health Center',
-      icon: '🩸',
-      status: 'Completed'
-    },
-    {
-      id: 4,
-      title: 'Nutrition Awareness Session',
-      description: 'Importance of balanced diet for families',
-      date: '5th February 2024',
-      time: '3:00 PM - 5:00 PM',
-      location: 'Anganwadi Center',
-      icon: '🍎',
-      status: 'Upcoming'
-    }
-  ]);
-
-  // Health tips for community
-  const [healthTips] = useState([
-    {
-      id: 1,
-      title: 'Hand Hygiene',
-      description: 'Importance of regular hand washing to prevent infections',
-      category: 'Hygiene',
-      icon: '🧼'
-    },
-    {
-      id: 2,
-      title: 'Safe Drinking Water',
-      description: 'Always drink boiled or filtered water',
-      category: 'Prevention',
-      icon: '💧'
-    },
-    {
-      id: 3,
-      title: 'Balanced Diet',
-      description: 'Include seasonal fruits and vegetables in daily meals',
-      category: 'Nutrition',
-      icon: '🍎'
-    },
-    {
-      id: 4,
-      title: 'Regular Exercise',
-      description: '30 minutes of walking daily for better health',
-      category: 'Fitness',
-      icon: '🚶'
-    }
-  ]);
+  const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#a4de6c"];
 
   useEffect(() => {
     let currentUser = null;
@@ -276,24 +95,25 @@ export default function AshaDashboard() {
         return;
       }
       setAsha(currentUser);
-      loadAshaData(currentUser.uuid || currentUser.id);
       setLoading(false);
     })();
   }, [navigate]);
 
-  const loadAshaData = (ashaId) => {
-    try {
-      // Load ASHA's patients - combine dummy data with any existing patients
-      // Load from IndexedDB patients where ownerId matches
-      storageService.listPatients().then((all) => {
-        const mine = all.filter(p => (p.ownerId === ashaId) || (p.ownerRole === 'asha'));
-        const allPatients = [...dummyPatients, ...mine];
-        setPatients(allPatients);
-      }).catch(() => setPatients(dummyPatients));
-    } catch (error) {
-      console.error('Error loading ASHA data:', error);
-      // Fallback to dummy data
-      setPatients(dummyPatients);
+  const getPriorityColor = (priority) => {
+    switch(priority) {
+      case "Critical": return "bg-red-100 text-red-700";
+      case "High": return "bg-orange-100 text-orange-700";
+      default: return "bg-blue-100 text-blue-700";
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch(status) {
+      case "Completed": return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case "Pending": return <Clock className="w-4 h-4 text-orange-600" />;
+      case "Scheduled": return <Calendar className="w-4 h-4 text-blue-600" />;
+      case "Overdue": return <AlertCircle className="w-4 h-4 text-red-600" />;
+      default: return <Activity className="w-4 h-4 text-gray-600" />;
     }
   };
 
@@ -302,109 +122,136 @@ export default function AshaDashboard() {
     navigate('/');
   };
 
-  const handlePatientAdded = (newPatient) => {
-    setPatients(prev => [...prev, newPatient]);
+  const handleRegistrationTypeSelect = (type) => {
+    setSelectedRegistrationType(type);
+    setRegistrationForm({ type: type.id });
   };
 
-  const handleHealthRecordUpload = (newRecord) => {
-    // Refresh patient data to show new health record
-    if (selectedPatient) {
-      const updatedRecords = getHealthRecordsByPatient(selectedPatient.id);
-      // You could update local state here if needed
-    }
+  const handleRegistrationSubmit = (e) => {
+    e.preventDefault();
+    // Handle form submission logic here
+    console.log('Registration form submitted:', registrationForm);
+    setShowRegistrationModal(false);
+    setSelectedRegistrationType(null);
+    setRegistrationForm({});
+    // Show success message
+    alert('Registration submitted successfully!');
   };
 
-  const handleMedicineSelect = (medicine) => {
-    const details = [
-      translate('Name') + ': ' + medicine.name,
-      translate('Company') + ': ' + (medicine.company || translate('Not specified')),
-      translate('Dosage') + ': ' + (medicine.dosage || translate('Not specified')),
-      translate('Category') + ': ' + (medicine.category || translate('Not specified')),
-      translate('Price') + ': ₹' + (medicine.price || translate('Not specified'))
+  const renderRegistrationForm = () => {
+    if (!selectedRegistrationType) return null;
+
+    const baseFields = [
+      { name: 'fullName', label: 'Full Name', type: 'text', required: true },
+      { name: 'age', label: 'Age', type: 'number', required: true },
+      { name: 'contactNumber', label: 'Contact Number', type: 'tel', required: true },
+      { name: 'address', label: 'Address', type: 'textarea', required: true },
     ];
-    alert(translate('Medicine Details') + ':\n\n' + details.join('\n'));
-  };
 
-  const handleAddToCart = (medicine) => {
-    alert((medicine.name || translate('Medicine')) + ' ' + translate('added to cart') + '!');
-  };
+    const specificFields = {
+      pregnancy: [
+        { name: 'lmpDate', label: 'Last Menstrual Period Date', type: 'date', required: true },
+        { name: 'edd', label: 'Expected Delivery Date', type: 'date', required: true },
+        { name: 'gravida', label: 'Gravida', type: 'number', required: true },
+        { name: 'para', label: 'Para', type: 'number', required: true },
+        { name: 'highRiskFactors', label: 'High Risk Factors', type: 'textarea', required: false },
+      ],
+      infant: [
+        { name: 'dateOfBirth', label: 'Date of Birth', type: 'date', required: true },
+        { name: 'gender', label: 'Gender', type: 'select', options: ['Male', 'Female'], required: true },
+        { name: 'birthWeight', label: 'Birth Weight (kg)', type: 'number', step: '0.1', required: true },
+        { name: 'motherName', label: "Mother's Name", type: 'text', required: true },
+        { name: 'deliveryType', label: 'Delivery Type', type: 'select', options: ['Normal', 'C-Section'], required: true },
+      ],
+      family: [
+        { name: 'familyHead', label: 'Family Head Name', type: 'text', required: true },
+        { name: 'familyMembers', label: 'Number of Family Members', type: 'number', required: true },
+        { name: 'rationCardNumber', label: 'Ration Card Number', type: 'text', required: false },
+        { name: 'belowPovertyLine', label: 'Below Poverty Line', type: 'checkbox', required: false },
+      ],
+      scheme: [
+        { name: 'schemeType', label: 'Scheme Type', type: 'select', options: ['Ayushman Bharat', 'JSY', 'JSSK', 'PMJAY'], required: true },
+        { name: 'schemeId', label: 'Scheme ID/Number', type: 'text', required: true },
+        { name: 'eligibilityDocument', label: 'Eligibility Document', type: 'file', required: false },
+      ]
+    };
 
-  const getPatientStats = (patient) => {
-    try {
-      const healthRecords = [...dummyHealthRecords, ...(getHealthRecordsByPatient(patient.id) || [])].filter(
-        record => record.patientId === patient.id
-      );
-      const prescriptions = [...dummyPrescriptions, ...(getPrescriptionsByPatient(patient.id) || [])].filter(
-        prescription => prescription.patientId === patient.id
-      );
-      
-      return {
-        healthRecords: healthRecords.length,
-        prescriptions: prescriptions.length
-      };
-    } catch (error) {
-      console.error('Error getting patient stats:', error);
-      return {
-        healthRecords: 0,
-        prescriptions: 0
-      };
-    }
-  };
+    const fields = [...baseFields, ...(specificFields[selectedRegistrationType.id] || [])];
 
-  const getPatientHealthRecords = (patientId) => {
-    try {
-      return storageService.listHealthRecordsByPatient(patientId).then((stored) => {
-        const combined = [...dummyHealthRecords, ...stored.map(r => ({
-          id: r.uuid || r.id,
-          patientId: r.patientUuid,
-          title: r.title || r.category || 'Record',
-          type: r.category || 'record',
-          notes: r.notes || '',
-          fileName: r.fileName || null,
-          createdAt: r.createdAt || r.date || new Date().toISOString()
-        }))];
-        return combined.filter(record => record.patientId === patientId);
-      });
-    } catch (error) {
-      console.error('Error getting health records:', error);
-      return Promise.resolve(dummyHealthRecords.filter(record => record.patientId === patientId));
-    }
-  };
-
-  const getPatientPrescriptions = (patientId) => {
-    return storageService.listHealthRecordsByPatient(patientId).then((stored) => {
-      const mapped = stored.filter(r => (r.category === 'prescription')).map(r => ({
-        id: r.uuid || r.id,
-        patientId: r.patientUuid,
-        doctorName: r.doctorName || 'Doctor',
-        text: r.text || r.notes || '',
-        createdAt: r.createdAt || r.date || new Date().toISOString()
-      }));
-      const combined = [...dummyPrescriptions, ...mapped];
-      return combined.filter(p => p.patientId === patientId);
-    }).catch(() => dummyPrescriptions.filter(p => p.patientId === patientId));
-  };
-
-  // Load records when selected patient changes
-  useEffect(() => {
-    if (selectedPatient && section === 'records') {
-      getPatientHealthRecords(selectedPatient.id).then(setRecordsState);
-    }
-  }, [selectedPatient, section]);
-
-  // Load prescriptions when selected patient changes
-  useEffect(() => {
-    if (selectedPatient && section === 'prescriptions') {
-      getPatientPrescriptions(selectedPatient.id).then(setPrescriptionsState);
-    }
-  }, [selectedPatient, section]);
-
-  const handleProgramRegister = (program) => {
-    alert(`Registering patients for: ${program.title}\n\nDate: ${program.date}\nTime: ${program.time}\nLocation: ${program.location}`);
-  };
-
-  const handleSchemeApply = (scheme) => {
-    alert(`Helping patient apply for: ${scheme.name}\n\nBenefits: ${scheme.benefits}\nEligibility: ${scheme.eligibility}`);
+    return (
+      <form onSubmit={handleRegistrationSubmit} className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          {fields.map((field) => (
+            <div key={field.name} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {field.label} {field.required && <span className="text-red-500">*</span>}
+              </label>
+              {field.type === 'textarea' ? (
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  rows="3"
+                  value={registrationForm[field.name] || ''}
+                  onChange={(e) => setRegistrationForm({...registrationForm, [field.name]: e.target.value})}
+                  required={field.required}
+                />
+              ) : field.type === 'select' ? (
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  value={registrationForm[field.name] || ''}
+                  onChange={(e) => setRegistrationForm({...registrationForm, [field.name]: e.target.value})}
+                  required={field.required}
+                >
+                  <option value="">Select {field.label}</option>
+                  {field.options.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              ) : field.type === 'checkbox' ? (
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                  checked={registrationForm[field.name] || false}
+                  onChange={(e) => setRegistrationForm({...registrationForm, [field.name]: e.target.checked})}
+                />
+              ) : field.type === 'file' ? (
+                <input
+                  type="file"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  onChange={(e) => setRegistrationForm({...registrationForm, [field.name]: e.target.files[0]})}
+                />
+              ) : (
+                <input
+                  type={field.type}
+                  step={field.step}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  value={registrationForm[field.name] || ''}
+                  onChange={(e) => setRegistrationForm({...registrationForm, [field.name]: e.target.value})}
+                  required={field.required}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-3 pt-4">
+          <button
+            type="submit"
+            className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-semibold"
+          >
+            Submit Registration
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRegistrationType(null);
+              setRegistrationForm({});
+            }}
+            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold"
+          >
+            Back to Types
+          </button>
+        </div>
+      </form>
+    );
   };
 
   if (loading) {
@@ -412,7 +259,7 @@ export default function AshaDashboard() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">{translate('Loading dashboard...')}</p>
+          <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -423,1000 +270,1083 @@ export default function AshaDashboard() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-64 bg-white shadow-xl flex flex-col">
-          <nav className="flex-1 p-4 space-y-2">
-            {[
-              { key: 'home', label: translate('Home'), icon: '🏠' },
-              { key: 'add_patient', label: translate('Add Patient'), icon: '➕' },
-              { key: 'household', label: translate('Household Register'), icon: '🏠' },
-              { key: 'patients', label: translate('Patients'), icon: '👥' },
-              { key: 'records', label: translate('Health Records'), icon: '📋' },
-              { key: 'prescriptions', label: translate('Prescriptions'), icon: '💊' },
-              { key: 'medicine', label: translate('Medicine Search'), icon: '🔍' },
-              { key: 'pharmacy', label: translate('Nearest Pharmacy'), icon: '🏥' },
-              { key: 'orders', label: translate('Medicine Orders'), icon: '📦' },
-              { key: 'chat', label: translate('Chat / Video'), icon: '💬' },
-              { key: 'campaign', label: translate('Campaign'), icon: '🏆' },
-              { key: 'health_schemes', label: translate('Health Schemes'), icon: '🛡' },
-              { key: 'awareness', label: translate('Awareness Programs'), icon: '📢' },
-              { key: 'training', label: translate('Training'), icon: '🎓' },
-              { key: 'profile', label: translate('Profile'), icon: '👤' },
-            ].map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setSection(item.key)}
-                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
-                  section === item.key
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'hover:bg-purple-100 text-gray-700'
-                }`}
-              >
-                <span className="mr-3">{item.icon}</span>
-                {item.label}
-              </button>
-            ))}
-          </nav>
+    <div className="flex h-screen bg-gray-50">
+      {/* Registration Modal */}
+      {showRegistrationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-gray-800">
+                  {selectedRegistrationType ? `Register ${selectedRegistrationType.label}` : 'New Registration'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowRegistrationModal(false);
+                    setSelectedRegistrationType(null);
+                    setRegistrationForm({});
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              {!selectedRegistrationType ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {REGISTRATION_TYPES.map((type) => (
+                    <button
+                      key={type.id}
+                      onClick={() => handleRegistrationTypeSelect(type)}
+                      className="p-4 border-2 border-gray-200 rounded-xl hover:shadow-md transition-all hover:border-purple-300 text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${type.color}`}>
+                          {type.icon}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-800">{type.label}</h4>
+                          <p className="text-sm text-gray-600 mt-1">Click to register new {type.label.toLowerCase()}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                renderRegistrationForm()
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-          {/* Logout button */}
-          <div className="p-4 border-t">
+      {/* Sidebar */}
+      <div className="w-64 bg-white shadow-lg flex flex-col border-r">
+        <div className="p-5 border-b bg-gradient-to-r from-purple-600 to-purple-700">
+          <h2 className="text-lg font-bold text-white">ASHA Dashboard</h2>
+          <p className="text-purple-100 text-xs mt-1">Community Health Worker</p>
+        </div>
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {[
+            { key: "home", label: "Home / Overview", icon: <Home className="w-4 h-4" /> },
+            { key: "beneficiaries", label: "My Beneficiaries", icon: <Users className="w-4 h-4" /> },
+            { key: "registration", label: "Patient Registration", icon: <UserPlus className="w-4 h-4" /> },
+            { key: "due_list", label: "Due List / Reminders", icon: <Calendar className="w-4 h-4" /> },
+            { key: "home_visits", label: "Home Visit Checklist", icon: <ClipboardList className="w-4 h-4" /> },
+            { key: "health_education", label: "Health Education", icon: <BookOpen className="w-4 h-4" /> },
+            { key: "referrals", label: "Referrals", icon: <TrendingUp className="w-4 h-4" /> },
+            { key: "incentives", label: "Incentives / Performance", icon: <Award className="w-4 h-4" /> },
+            { key: "messages", label: "Messages / Notifications", icon: <Bell className="w-4 h-4" /> },
+            { key: "reports", label: "Reports / History", icon: <FileText className="w-4 h-4" /> },
+            { key: "video_call", label: "Video Consultation", icon: <Phone className="w-4 h-4" /> },
+            { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
+            { key: "help", label: "Help / FAQ", icon: <HelpCircle className="w-4 h-4" /> },
+          ].map((item) => (
             <button
-              onClick={handleLogout}
-              className="w-full text-left px-4 py-3 rounded-lg font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+              key={item.key}
+              onClick={() => {
+                if (item.key === "registration") {
+                  setShowRegistrationModal(true);
+                } else {
+                  setSection(item.key);
+                }
+              }}
+              className={`w-full text-left px-3 py-2.5 rounded-lg font-medium transition-all flex items-center gap-3 text-sm ${
+                section === item.key 
+                  ? "bg-purple-600 text-white shadow-md" 
+                  : "hover:bg-purple-50 text-gray-700"
+              }`}
             >
-              <span className="mr-3">🚪</span>
-              {translate('Logout')}
+              {item.icon}
+              <span>{item.label}</span>
             </button>
+          ))}
+        </nav>
+        <div className="p-3 border-t">
+          <div className="mb-3 p-3 bg-purple-50 rounded-lg">
+            <p className="text-xs font-semibold text-purple-900">{asha.name}</p>
+            <p className="text-xs text-purple-700">ASHA Worker - Rampur</p>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="w-full px-3 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center justify-center gap-2 text-sm font-medium"
+          >
+            <LogOut className="w-4 h-4" /> Logout
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Header */}
+        <div className="bg-white border-b px-6 py-4 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">
+                {section === 'home' && 'ASHA Dashboard'}
+                {section === 'beneficiaries' && 'My Beneficiaries'}
+                {section === 'registration' && 'Patient Registration'}
+                {section === 'due_list' && 'Due List & Reminders'}
+                {section === 'home_visits' && 'Home Visit Checklist'}
+                {section === 'health_education' && 'Health Education'}
+                {section === 'referrals' && 'Referrals'}
+                {section === 'incentives' && 'Incentives & Performance'}
+                {section === 'messages' && 'Messages & Notifications'}
+                {section === 'reports' && 'Reports & History'}
+                {section === 'video_call' && 'Video Consultation'}
+                {section === 'settings' && 'Settings'}
+                {section === 'help' && 'Help & FAQ'}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">ASHA Worker - Rampur Village, Block: Motihari</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button className="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm">
+                <Calendar className="w-4 h-4" />
+                Oct 1, 2025
+              </button>
+              <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm font-medium">
+                <Download className="w-4 h-4" />
+                Export
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Main content */}
-        <div className="flex-1 flex justify-center items-start p-6 overflow-y-auto">
-          <div className="w-full max-w-6xl">
-            {/* Home Section */}
-            {section === 'home' && (
-              <div className="space-y-6">
-                {/* Welcome Card */}
-                <div className="bg-white shadow-lg rounded-2xl p-8 text-center">
-                  <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                    {translate('Welcome back')}, {asha.name} 👩‍⚕
-                  </h2>
-                  <p className="text-gray-600 mb-6">
-                    {translate('Manage your patients and provide community healthcare services')}
-                  </p>
+        <div className="p-6">
+          {/* HOME SECTION */}
+          {section === "home" && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6 rounded-xl shadow-lg text-white">
+                <h2 className="text-2xl font-bold mb-2">Welcome back, {asha.name}!</h2>
+                <p className="opacity-90">Monitor your community health tasks, track beneficiaries, and provide quality healthcare services</p>
+              </div>
 
-                  {/* Quick Stats */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-                    <div className="bg-purple-50 p-4 rounded-lg">
-                      <div className="text-2xl font-bold text-purple-600">{patients.length}</div>
-                      <div className="text-sm text-gray-600">{translate('Patients')}</div>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-xl shadow-md border-l-4 border-purple-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-3xl font-bold text-purple-600">{BENEFICIARIES.reduce((sum, b) => sum + b.total, 0)}</p>
+                      <p className="text-gray-600 text-sm mt-1">Total Beneficiaries</p>
                     </div>
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <div className="text-2xl font-bold text-green-600">12</div>
-                      <div className="text-sm text-gray-600">{translate('This Month Visits')}</div>
+                    <div className="bg-purple-100 p-3 rounded-lg">
+                      <Users className="w-6 h-6 text-purple-600" />
                     </div>
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600">8</div>
-                      <div className="text-sm text-gray-600">{translate('Pending Follow-ups')}</div>
-                    </div>
-                    <div className="bg-orange-50 p-4 rounded-lg">
-                      <div className="text-2xl font-bold text-orange-600">4</div>
-                      <div className="text-sm text-gray-600">{translate('Active Programs')}</div>
-                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center text-xs text-green-600">
+                    <TrendingUp className="w-3 h-3 mr-1" /> +5 from last month
                   </div>
                 </div>
 
-                {/* Quick Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <button
-                    onClick={() => setSection('add_patient')}
-                    className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
-                  >
-                    <div className="text-3xl mb-3">➕</div>
-                    <h3 className="font-semibold text-gray-800 mb-2">{translate('Add Patient')}</h3>
-                    <p className="text-gray-600 text-sm">{translate('Register new patients in your community')}</p>
-                  </button>
-
-                  <button
-                    onClick={() => setSection('patients')}
-                    className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
-                  >
-                    <div className="text-3xl mb-3">👥</div>
-                    <h3 className="font-semibold text-gray-800 mb-2">{translate('View Patients')}</h3>
-                    <p className="text-gray-600 text-sm">{translate('Manage your registered patients')}</p>
-                  </button>
-
-                  <button
-                    onClick={() => setSection('medicine')}
-                    className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
-                  >
-                    <div className="text-3xl mb-3">🔍</div>
-                    <h3 className="font-semibold text-gray-800 mb-2">{translate('Medicine Search')}</h3>
-                    <p className="text-gray-600 text-sm">{translate('Search for medicines and information')}</p>
-                  </button>
-
-                  <button
-                    onClick={() => setSection('awareness')}
-                    className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
-                  >
-                    <div className="text-3xl mb-3">📢</div>
-                    <h3 className="font-semibold text-gray-800 mb-2">{translate('Awareness Programs')}</h3>
-                    <p className="text-gray-600 text-sm">{translate('Manage community health programs')}</p>
-                  </button>
+                <div className="bg-white p-5 rounded-xl shadow-md border-l-4 border-green-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-3xl font-bold text-green-600">{DUE_LIST.filter(d => d.status === 'Due' || d.status === 'Overdue').length}</p>
+                      <p className="text-gray-600 text-sm mt-1">Pending Tasks</p>
+                    </div>
+                    <div className="bg-green-100 p-3 rounded-lg">
+                      <Calendar className="w-6 h-6 text-green-600" />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center text-xs text-orange-600">
+                    <AlertCircle className="w-3 h-3 mr-1" /> Requires attention
+                  </div>
                 </div>
 
-                {/* Health Tips Section */}
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    {translate('Community Health Tips')}
+                <div className="bg-white p-5 rounded-xl shadow-md border-l-4 border-orange-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-3xl font-bold text-orange-600">{BENEFICIARIES.reduce((sum, b) => sum + b.highRisk, 0)}</p>
+                      <p className="text-gray-600 text-sm mt-1">High Risk Cases</p>
+                    </div>
+                    <div className="bg-orange-100 p-3 rounded-lg">
+                      <AlertCircle className="w-6 h-6 text-orange-600" />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center text-xs text-orange-600">
+                    <AlertCircle className="w-3 h-3 mr-1" /> Monitor closely
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl shadow-md border-l-4 border-blue-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-3xl font-bold text-blue-600">₹{INCENTIVES.filter(i => i.status === 'Approved').reduce((sum, i) => sum + i.amount, 0)}</p>
+                      <p className="text-gray-600 text-sm mt-1">Monthly Incentives</p>
+                    </div>
+                    <div className="bg-blue-100 p-3 rounded-lg">
+                      <Award className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center text-xs text-green-600">
+                    <TrendingUp className="w-3 h-3 mr-1" /> Good performance
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions & Due List */}
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-md">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-purple-600" />
+                    Today's Due List
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {healthTips.map((tip) => (
-                      <div
-                        key={tip.id}
-                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                      >
-                        <div className="text-2xl mb-2">{tip.icon}</div>
-                        <h4 className="font-medium text-gray-800 mb-2">{tip.title}</h4>
-                        <p className="text-sm text-gray-600">{tip.description}</p>
-                        <span className="inline-block mt-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                          {tip.category}
+                  <div className="space-y-3">
+                    {DUE_LIST.slice(0, 4).map((item) => (
+                      <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          {getStatusIcon(item.status)}
+                          <div>
+                            <p className="font-semibold text-sm">{item.patient}</p>
+                            <p className="text-xs text-gray-600">{item.type} • Due: {item.date}</p>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${getPriorityColor(item.priority)}`}>
+                          {item.priority}
                         </span>
                       </div>
                     ))}
                   </div>
+                  <button 
+                    onClick={() => setSection('due_list')}
+                    className="w-full mt-4 py-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 text-sm font-medium"
+                  >
+                    View All Due Tasks
+                  </button>
                 </div>
 
-                {/* Upcoming Programs Preview */}
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800">
-                      {translate('Upcoming Health Programs')}
-                    </h3>
-                    <button
-                      onClick={() => setSection('awareness')}
-                      className="text-purple-600 hover:text-purple-800 text-sm font-medium"
-                    >
-                      {translate('View All')} →
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {awarenessPrograms.filter(p => p.status === 'Upcoming').slice(0, 2).map((program) => (
-                      <div
-                        key={program.id}
-                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div className="text-2xl">{program.icon}</div>
-                          <div className="flex-1">
-                            <h4 className="font-medium text-gray-800 mb-1">{program.title}</h4>
-                            <p className="text-sm text-gray-600 mb-2">{program.description}</p>
-                            <div className="text-xs text-gray-500 space-y-1">
-                              <p>📅 {program.date} | 🕒 {program.time}</p>
-                              <p>📍 {program.location}</p>
-                            </div>
-                            <button
-                              onClick={() => handleProgramRegister(program)}
-                              className="mt-2 px-3 py-1 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 transition-colors"
-                            >
-                              {translate('Register Patients')}
-                            </button>
-                          </div>
+                <div className="bg-white p-6 rounded-xl shadow-md">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-purple-600" />
+                    Recent Notifications
+                  </h3>
+                  <div className="space-y-3">
+                    {NOTIFICATIONS.slice(0, 3).map(n => (
+                      <div key={n.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                        <div className={`px-2 py-1 rounded text-xs font-semibold ${getPriorityColor(n.priority)}`}>
+                          {n.priority}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">{n.title}</p>
+                          <p className="text-xs text-gray-600 mt-1">{n.body.substring(0, 80)}...</p>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-
-                {/* Recent Patients Preview */}
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800">
-                      {translate('Recent Patients')}
-                    </h3>
-                    <button
-                      onClick={() => setSection('patients')}
-                      className="text-purple-600 hover:text-purple-800 text-sm font-medium"
-                    >
-                      {translate('View All')} →
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {patients.slice(0, 2).map((patient) => {
-                      const stats = getPatientStats(patient);
-                      return (
-                        <div
-                          key={patient.id}
-                          className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-medium text-gray-800">{patient.name}</h4>
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                              {patient.age} {translate('years')}
-                            </span>
-                          </div>
-                          <div className="space-y-1 text-sm text-gray-600">
-                            <p>📞 {patient.phone}</p>
-                            <p>🏠 {patient.village}</p>
-                            <p>📋 {translate('Health Records')}: {stats.healthRecords}</p>
-                            <p className="text-xs text-gray-500">
-                              {translate('Next Visit')}: {patient.nextVisit}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <button 
+                    onClick={() => setSection('messages')}
+                    className="w-full mt-4 py-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 text-sm font-medium"
+                  >
+                    View All Notifications
+                  </button>
                 </div>
               </div>
-            )}
 
-            {/* Health Schemes Section */}
-            {section === 'health_schemes' && (
-              <div className="space-y-6">
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                    {translate('Government Health Schemes')}
-                  </h3>
-                  <p className="text-gray-600 mb-6">
-                    {translate('Help your patients access various healthcare schemes provided by the Government')}
-                  </p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-                    {healthSchemes.map((scheme) => (
-                      <div
-                        key={scheme.id}
-                        className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
-                      >
-                        <div className="flex items-start space-x-4">
-                          <div className="text-3xl">{scheme.icon}</div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-gray-800 mb-2">{scheme.name}</h4>
-                            <p className="text-sm text-gray-600 mb-3">{scheme.description}</p>
-                            <div className="space-y-1 text-xs text-gray-500">
-                              <div className="flex justify-between">
-                                <span>Category:</span>
-                                <span className="font-medium">{scheme.category}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Eligibility:</span>
-                                <span className="font-medium text-green-600">{scheme.eligibility}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Benefits:</span>
-                                <span className="font-medium text-blue-600">{scheme.benefits}</span>
-                              </div>
-                            </div>
-                            <button 
-                              onClick={() => handleSchemeApply(scheme)}
-                              className="w-full mt-4 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                            >
-                              {translate('Help Patient Apply')}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Scheme Application Status */}
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    {translate('Recent Scheme Applications')}
-                  </h3>
-                  <div className="space-y-4">
-                    {[
-                      { patient: 'Priya Sharma', scheme: 'Pradhan Mantri Matru Vandana Yojana', status: 'Approved', date: '2024-01-10' },
-                      { patient: 'Sunita Devi', scheme: 'Janani Shishu Suraksha Karyakram', status: 'Pending', date: '2024-01-18' },
-                      { patient: 'Ramesh Kumar', scheme: 'Ayushman Bharat', status: 'Approved', date: '2024-01-05' }
-                    ].map((application, index) => (
-                      <div key={index} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h5 className="font-medium text-gray-800">{application.patient}</h5>
-                            <p className="text-sm text-gray-600">{application.scheme}</p>
-                            <p className="text-xs text-gray-500">Applied: {application.date}</p>
-                          </div>
-                          <span className={`px-3 py-1 text-sm rounded-full ${
-                            application.status === 'Approved' 
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {application.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Awareness Programs Section */}
-            {section === 'awareness' && (
-              <div className="space-y-6">
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-6">
-                    {translate('Community Health Awareness Programs')}
-                  </h3>
-
-                  {/* Upcoming Programs */}
-                  <div className="mb-8">
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">{translate('Upcoming Programs')}</h4>
-                    <div className="space-y-4">
-                      {awarenessPrograms.filter(p => p.status === 'Upcoming').map((program) => (
-                        <div
-                          key={program.id}
-                          className="border border-blue-200 bg-blue-50 rounded-lg p-4"
-                        >
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-start space-x-3">
-                              <div className="text-2xl">{program.icon}</div>
-                              <div>
-                                <h5 className="font-semibold text-gray-800">{program.title}</h5>
-                                <p className="text-sm text-gray-600">{program.description}</p>
-                              </div>
-                            </div>
-                            <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                              {translate('Upcoming')}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                            <div>
-                              <p className="text-sm text-gray-600">{translate('Date & Time')}</p>
-                              <p className="font-semibold text-gray-700">{program.date} | {program.time}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">{translate('Location')}</p>
-                              <p className="font-semibold text-gray-700">{program.location}</p>
-                            </div>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button 
-                              onClick={() => handleProgramRegister(program)}
-                              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                            >
-                              {translate('Register Patients')}
-                            </button>
-                            <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                              {translate('View Details')}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Completed Programs */}
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">{translate('Completed Programs')}</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {awarenessPrograms.filter(p => p.status === 'Completed').map((program) => (
-                        <div
-                          key={program.id}
-                          className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-start space-x-4">
-                            <div className="text-3xl">{program.icon}</div>
-                            <div className="flex-1">
-                              <h5 className="font-semibold text-gray-800 mb-2">{program.title}</h5>
-                              <p className="text-sm text-gray-600 mb-3">{program.description}</p>
-                              <div className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Date:</span>
-                                  <span className="font-semibold text-gray-700">{program.date}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Location:</span>
-                                  <span className="font-medium text-blue-600">{program.location}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Participants:</span>
-                                  <span className="font-medium text-green-600">45 families</span>
-                                </div>
-                              </div>
-                              <button className="w-full mt-4 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors">
-                                {translate('View Report')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Add Patient Section */}
-            {section === 'add_patient' && (
-              <AshaPatientForm onPatientAdded={handlePatientAdded} />
-            )}
-
-            {/* Patients Section */}
-            {/* Household Register */}
-            {section === 'household' && (
-              <HouseholdRegister />
-            )}
-            {section === 'patients' && (
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                  {translate('Your Patients')} ({patients.length})
+              {/* Quick Registration Options */}
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-purple-600" />
+                  Quick Registration
                 </h3>
-                
-                {patients.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">
-                    {translate('No patients added yet. Start by adding your first patient!')}
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {patients.map((patient) => {
-                      const stats = getPatientStats(patient);
-                      
-                      return (
-                        <div
-                          key={patient.id}
-                          className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-3 mb-2">
-                                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                                  {patient.photo ? (
-                                    <img
-                                      src={patient.photo}
-                                      alt={patient.name}
-                                      className="w-full h-full object-cover rounded-full"
-                                    />
-                                  ) : (
-                                    <svg
-                                      className="w-6 h-6 text-purple-600"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                                      />
-                                    </svg>
-                                  )}
-                                </div>
-                                
-                                <div>
-                                  <h4 className="font-medium text-gray-900">{patient.name}</h4>
-                                  <p className="text-sm text-gray-600">
-                                    {patient.age} {translate('years')} • {patient.gender} • {patient.village}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="mb-2">
-                                <p className="text-sm text-gray-700">
-                                  <span className="font-medium">{translate('Health Conditions')}:</span> {patient.healthConditions.join(', ')}
-                                </p>
-                              </div>
-
-                              <div className="flex space-x-4 text-sm text-gray-600">
-                                <span>{translate('Health Records')}: {stats.healthRecords}</span>
-                                <span>{translate('Prescriptions')}: {stats.prescriptions}</span>
-                                <span>{translate('Last Visit')}: {patient.lastVisit}</span>
-                                <span>{translate('Next Visit')}: {patient.nextVisit}</span>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-col space-y-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedPatient(patient);
-                                  setSection('records');
-                                }}
-                                className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-md hover:bg-blue-200 transition-colors"
-                              >
-                                {translate('View Records')}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedPatient(patient);
-                                  setSection('prescriptions');
-                                }}
-                                className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-md hover:bg-green-200 transition-colors"
-                              >
-                                {translate('Prescriptions')}
-                              </button>
-                              <button className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-md hover:bg-purple-200 transition-colors">
-                                {translate('Schedule Visit')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {REGISTRATION_TYPES.map((type) => (
+                    <button
+                      key={type.id}
+                      onClick={() => {
+                        setShowRegistrationModal(true);
+                        handleRegistrationTypeSelect(type);
+                      }}
+                      className="p-3 border-2 border-gray-200 rounded-lg hover:shadow-md transition-all hover:border-purple-300 text-center"
+                    >
+                      <div className={`p-2 rounded-lg ${type.color} inline-flex`}>
+                        {type.icon}
+                      </div>
+                      <p className="text-xs font-medium mt-2 text-gray-700">{type.label}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
 
-            {/* Health Records Section */}
-            {section === 'records' && (
-              <div className="space-y-6">
-                {selectedPatient ? (
-                  <div>
-                    <div className="bg-white p-4 rounded-lg shadow-md mb-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                            {translate('Health Records for')} {selectedPatient.name}
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            {selectedPatient.age} {translate('years')} • {selectedPatient.village} • {selectedPatient.healthConditions.join(', ')}
-                          </p>
+              {/* Beneficiary Overview */}
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-600" />
+                  Beneficiary Overview
+                </h3>
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {BENEFICIARIES.map((b) => (
+                    <div key={b.id} className="border-2 border-gray-200 p-4 rounded-xl hover:shadow-lg transition-shadow">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-bold text-gray-800">{b.type}</h4>
+                        <div className="bg-purple-100 p-2 rounded-lg">
+                          <Users className="w-4 h-4 text-purple-600" />
                         </div>
-                        <button
-                          onClick={() => setSelectedPatient(null)}
-                          className="text-sm text-purple-600 hover:underline"
-                        >
-                          {translate('← Back to all patients')}
-                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Total:</span>
+                          <span className="font-bold text-lg text-purple-600">{b.total}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">High Risk:</span>
+                          <span className="font-bold text-red-600">{b.highRisk}</span>
+                        </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
-                    <HealthRecordUploader
-                      patientId={selectedPatient.id}
-                      onUpload={handleHealthRecordUpload}
-                    />
-
-                    {/* Records List */}
-                    <div className="bg-white p-6 rounded-lg shadow-md">
-                      <h4 className="text-md font-semibold text-gray-800 mb-4">
-                        {translate('Health Records')}
-                      </h4>
-                      
-                      {recordsState.length === 0 ? (
-                          <p className="text-gray-500 text-center py-8">
-                            {translate('No health records uploaded yet')}
-                          </p>
-                        ) : (
-                          <div className="space-y-3">
-                            {recordsState.map((record) => (
-                              <div
-                                key={record.id}
-                                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <h5 className="font-medium text-gray-900">{record.title}</h5>
-                                    <p className="text-sm text-gray-600">{record.notes}</p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      {translate('Uploaded')}: {new Date(record.createdAt).toLocaleDateString()}
-                                    </p>
-                                  </div>
-                                  <div className="flex space-x-2">
-                                    {record.fileName && (
-                                      <button className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-md hover:bg-blue-200 transition-colors">
-                                        {translate('View File')}
-                                      </button>
-                                    )}
-                                    <button className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-md hover:bg-green-200 transition-colors">
-                                      {translate('Share')}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+          {/* BENEFICIARIES SECTION */}
+          {section === "beneficiaries" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold flex items-center gap-2">
+                    <Users className="w-6 h-6 text-purple-600" />
+                    My Beneficiaries
+                  </h3>
+                  <div className="flex gap-3">
+                    <div className="relative">
+                      <Eye className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+                      <input 
+                        type="text" 
+                        placeholder="Search beneficiaries..." 
+                        className="pl-10 pr-4 py-2 border rounded-lg text-sm"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <button 
+                      onClick={() => setShowRegistrationModal(true)}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm"
+                    >
+                      <Plus className="w-4 h-4" /> Add Beneficiary
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                  {BENEFICIARIES.map((b) => (
+                    <div key={b.id} className="border-2 border-gray-200 p-5 rounded-xl hover:shadow-lg transition-shadow">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-bold text-lg text-gray-800">{b.type}</h4>
+                        <div className="bg-purple-100 p-2 rounded-lg">
+                          <Users className="w-5 h-5 text-purple-600" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Total:</span>
+                          <span className="font-bold text-xl text-purple-600">{b.total}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">High Risk:</span>
+                          <span className="font-bold text-lg text-red-600">{b.highRisk}</span>
+                        </div>
+                        {b.registered && (
+                          <div className="pt-2 border-t">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-500">Registered:</span>
+                              <span className="font-semibold">{b.registered}</span>
+                            </div>
                           </div>
                         )}
+                      </div>
+                      <button className="w-full mt-4 py-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 text-sm font-medium flex items-center justify-center gap-2">
+                        <Eye className="w-4 h-4" /> View Details
+                      </button>
                     </div>
-                  </div>
-                ) : (
-                  <div className="bg-white p-6 rounded-lg shadow-md text-center">
-                    <p className="text-gray-500">
-                      {translate('Select a patient to view their health records')}
-                    </p>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Prescriptions Section */}
-            {section === 'prescriptions' && (
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                  {translate('Patient Prescriptions')}
-                </h3>
-                
-                {!selectedPatient ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-500 mb-4">
-                      {translate('Select a patient to view their prescriptions')}
-                    </p>
-                    <button
-                      onClick={() => setSection('patients')}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                    >
-                      {translate('View Patients')}
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="bg-purple-50 p-4 rounded-lg mb-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-semibold text-gray-800">{selectedPatient.name}</h4>
-                          <p className="text-sm text-gray-600">
-                            {selectedPatient.age} {translate('years')} • {selectedPatient.village}
-                          </p>
+          {/* DUE LIST SECTION */}
+          {section === "due_list" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold flex items-center gap-2">
+                    <Calendar className="w-6 h-6 text-purple-600" />
+                    Due List & Reminders
+                  </h3>
+                  <select 
+                    className="px-4 py-2 border rounded-lg text-sm"
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                  >
+                    <option value="all">All Status</option>
+                    <option value="Due">Due</option>
+                    <option value="Overdue">Overdue</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+
+                <div className="space-y-4">
+                  {DUE_LIST.filter(item => filterStatus === "all" || item.status === filterStatus).map((item) => (
+                    <div key={item.id} className="border-2 border-gray-200 p-5 rounded-xl hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className="bg-purple-100 p-3 rounded-lg">
+                            {getStatusIcon(item.status)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="font-bold text-lg">{item.patient}</h4>
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${getPriorityColor(item.priority)}`}>
+                                {item.priority}
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                item.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                item.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                'bg-orange-100 text-orange-700'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <p className="text-gray-500">Service Type:</p>
+                                <p className="font-semibold">{item.type}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Due Date:</p>
+                                <p className="font-semibold">{item.date}</p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <button
-                          onClick={() => setSelectedPatient(null)}
-                          className="text-sm text-purple-600 hover:underline"
-                        >
-                          {translate('← Back to all patients')}
-                        </button>
+                        <div className="flex gap-2">
+                          <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
+                            Mark Done
+                          </button>
+                          <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                            Reschedule
+                          </button>
+                        </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
-                    {prescriptionsState.length === 0 ? (
-                        <p className="text-gray-500 text-center py-8">
-                          {translate('No prescriptions available for this patient')}
-                        </p>
-                      ) : (
-                        <div className="space-y-4">
-                          {prescriptionsState.map((prescription) => (
-                            <div
-                              key={prescription.id}
-                              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <h5 className="font-medium text-gray-900 mb-2">
-                                    {translate('Prescription')} #{prescription.id.slice(-8)}
-                                  </h5>
-                                  <div className="bg-gray-50 p-3 rounded-md mb-3">
-                                    <p className="text-gray-700 whitespace-pre-line">{prescription.text}</p>
-                                  </div>
-                                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                                    <span>{translate('Doctor')}: {prescription.doctorName || translate('Unknown')}</span>
-                                    <span>{translate('Date')}: {new Date(prescription.createdAt).toLocaleDateString()}</span>
-                                  </div>
-                                </div>
-                                <div className="flex space-x-2">
-                                  <button className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-md hover:bg-green-200 transition-colors">
-                                    {translate('Download')}
-                                  </button>
-                                  <button className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-md hover:bg-blue-200 transition-colors">
-                                    {translate('Share')}
-                                  </button>
-                                </div>
-                              </div>
+          {/* HOME VISITS SECTION */}
+          {section === "home_visits" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold flex items-center gap-2">
+                    <ClipboardList className="w-6 h-6 text-purple-600" />
+                    Home Visit Checklist
+                  </h3>
+                  <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm">
+                    <Plus className="w-4 h-4" /> New Visit
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {HOME_VISITS.map((visit) => (
+                    <div key={visit.id} className="border-2 border-gray-200 p-5 rounded-xl hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className="bg-purple-100 p-3 rounded-lg">
+                            {getStatusIcon(visit.status)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="font-bold text-lg">{visit.patient}</h4>
+                              <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">
+                                {visit.type}
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                visit.status === 'Pending' ? 'bg-orange-100 text-orange-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {visit.status}
+                              </span>
+                            </div>
+                            <p className="text-gray-600">Scheduled: {visit.date}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h5 className="font-semibold text-sm mb-3">Checklist Items:</h5>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {visit.checklist.map((item, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <input type="checkbox" className="w-4 h-4 text-purple-600" />
+                              <span className="text-sm text-gray-700">{item}</span>
                             </div>
                           ))}
                         </div>
-                      )}
-                  </div>
-                )}
-              </div>
-            )}
+                      </div>
 
-            {/* Medicine Search Section */}
-            {section === 'medicine' && (
-              <MedicineSearch
-                onSelect={handleMedicineSelect}
-                showAddToCart={true}
-                onAddToCart={handleAddToCart}
-              />
-            )}
-
-            {/* Pharmacy Section */}
-            {section === 'pharmacy' && (
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                  {translate('Nearest Pharmacies')}
-                </h3>
-                
-                <div className="space-y-4">
-                  {[
-                    {
-                      id: 1,
-                      name: 'Rampur Medical Store',
-                      address: 'Main Road, Rampur',
-                      phone: '+91 98765 43210',
-                      distance: '0.5 km',
-                      isOpen: true,
-                      openTime: '8:00 AM',
-                      closeTime: '10:00 PM'
-                    },
-                    {
-                      id: 2,
-                      name: 'City Pharmacy',
-                      address: 'Market Street, Rampur',
-                      phone: '+91 87654 32109',
-                      distance: '1.2 km',
-                      isOpen: true,
-                      openTime: '9:00 AM',
-                      closeTime: '9:00 PM'
-                    },
-                    {
-                      id: 3,
-                      name: '24/7 Medical',
-                      address: 'Highway Road, Rampur',
-                      phone: '+91 76543 21098',
-                      distance: '2.5 km',
-                      isOpen: true,
-                      openTime: '24/7',
-                      closeTime: '24/7'
-                    }
-                  ].map((pharmacy) => (
-                    <div
-                      key={pharmacy.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <h5 className="font-semibold text-gray-900">{pharmacy.name}</h5>
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              pharmacy.isOpen 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {pharmacy.isOpen ? translate('Open') : translate('Closed')}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mb-1">{pharmacy.address}</p>
-                          <p className="text-sm text-gray-600 mb-1">{pharmacy.phone}</p>
-                          <p className="text-sm text-gray-600 mb-1">{pharmacy.distance} away</p>
-                          <p className="text-xs text-gray-500">
-                            {pharmacy.openTime === '24/7' ? 
-                              translate('Open 24/7') : 
-                              `${translate('Hours')}: ${pharmacy.openTime} - ${pharmacy.closeTime}`
-                            }
-                          </p>
-                        </div>
-                        <div className="flex flex-col space-y-2">
-                          <button 
-                            className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-md hover:bg-blue-200 transition-colors"
-                            onClick={() => alert($`{translate('Calling')} ${pharmacy.name}...`)}
-                          >
-                            {translate('Call')}
-                          </button>
-                          <button 
-                            className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-md hover:bg-green-200 transition-colors"
-                            onClick={() => alert($`{translate('Getting directions to')} ${pharmacy.name}...`)}
-                          >
-                            {translate('Directions')}
-                          </button>
-                          <button 
-                            className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-md hover:bg-purple-200 transition-colors"
-                            onClick={() => alert(`${translate('Ordering medicines from')} ${pharmacy.name}...`)}
-                          >
-                            {translate('Order Medicines')}
-                          </button>
-                        </div>
+                      <div className="flex gap-2 mt-4">
+                        <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
+                          Complete Visit
+                        </button>
+                        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                          Add Notes
+                        </button>
+                        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                          Reschedule
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Orders Section */}
-            {section === 'orders' && (
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold text-gray-800 mb-6">
-                  {translate('Medicine Orders for Patients')}
-                </h3>
-
-                <div className="space-y-6">
-                  {[
-                    {
-                      id: 'ord_001',
-                      patientName: 'Priya Sharma',
-                      medicines: ['Iron Tablets', 'Calcium Supplements', 'Folic Acid'],
-                      pharmacy: 'Rampur Medical Store',
-                      status: 'delivered',
-                      total: 450,
-                      createdAt: '2024-01-16'
-                    },
-                    {
-                      id: 'ord_002',
-                      patientName: 'Ramesh Kumar',
-                      medicines: ['Metformin 500mg', 'Glimepride 2mg'],
-                      pharmacy: 'City Pharmacy',
-                      status: 'shipped',
-                      total: 320,
-                      createdAt: '2024-01-18'
-                    },
-                    {
-                      id: 'ord_003',
-                      patientName: 'Sunita Devi',
-                      medicines: ['Prenatal Vitamins', 'Iron Syrup'],
-                      pharmacy: '24/7 Medical',
-                      status: 'processing',
-                      total: 280,
-                      createdAt: '2024-01-19'
-                    }
-                  ].map((order) => (
-                    <div
-                      key={order.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h5 className="font-medium text-gray-900">
-                            {translate('Order for')} {order.patientName}
-                          </h5>
-                          <p className="text-sm text-gray-600">
-                            {translate('Order')} #{order.id.slice(-8)}
-                          </p>
-                        </div>
-                        <span className={`px-3 py-1 text-sm rounded-full capitalize ${
-                          order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                          order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {order.status}
-                        </span>
-                      </div>
-                      
-                      <div className="mb-3">
-                        <p className="text-sm text-gray-700">
-                          <span className="font-medium">{translate('Medicines')}:</span> {order.medicines.join(', ')}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {translate('Pharmacy')}: {order.pharmacy}
-                        </p>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-500">
-                          {translate('Order Date')}: {order.createdAt}
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-semibold text-gray-900">₹{order.total}</span>
-                          <button className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-md hover:bg-purple-200 transition-colors">
-                            {translate('Track')}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-                  <h4 className="font-semibold text-gray-800 mb-2">
-                    {translate('Place New Order')}
-                  </h4>
-                  <p className="text-sm text-gray-600 mb-3">
-                    {translate('Order medicines for your patients from nearby pharmacies')}
-                  </p>
-                  <button
-                    onClick={() => setSection('medicine')}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                  >
-                    {translate('Browse Medicines')}
+          {/* HEALTH EDUCATION SECTION */}
+          {section === "health_education" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold flex items-center gap-2">
+                    <BookOpen className="w-6 h-6 text-purple-600" />
+                    Health Education Materials
+                  </h3>
+                  <button className="px-4 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm">
+                    <Download className="w-4 h-4" /> Download All
                   </button>
                 </div>
+
+                <div className="grid gap-4">
+                  {HEALTH_EDUCATION.map((material) => (
+                    <div key={material.id} className="border-2 border-gray-200 p-5 rounded-xl hover:shadow-md transition-shadow flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-lg ${material.type === 'PDF' ? 'bg-red-100' : 'bg-blue-100'}`}>
+                          {material.type === 'PDF' ? 
+                            <FileText className="w-6 h-6 text-red-600" /> : 
+                            <Activity className="w-6 h-6 text-blue-600" />
+                          }
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-800">{material.title}</h4>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                            <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{material.category}</span>
+                            <span>{material.size}</span>
+                            <span className="flex items-center gap-1">
+                              <Download className="w-3 h-3" /> {material.downloads} downloads
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm">
+                          <Eye className="w-4 h-4" /> View
+                        </button>
+                        <button className="px-4 py-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 flex items-center gap-2 text-sm">
+                          <Download className="w-4 h-4" /> Download
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Chat / Video Section */}
-            {section === 'chat' && (
-              <MessageVideoSection 
-                userId={asha.id}
-                userName={asha.name}
-                userRole="asha"
-              />
-            )}
-
-            {/* Campaign Section */}
-            {section === 'campaign' && (
-              <CampaignPanel />
-            )}
-
-            {/* Training Section */}
-            {section === 'training' && (
-              <TrainingContent />
-            )}
-
-            {/* Profile Section */}
-            {section === 'profile' && (
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold text-gray-800 mb-6">
-                  {translate('ASHA Worker Profile')}
-                </h3>
-                
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        {translate('Name')}
-                      </label>
-                      <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md border">
-                        {asha.name || 'N/A'}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        {translate('Phone')}
-                      </label>
-                      <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md border">
-                        {asha.phone || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        {translate('Email')}
-                      </label>
-                      <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md border">
-                        {asha.email || 'N/A'}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        {translate('Location')}
-                      </label>
-                      <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md border">
-                        {asha.location || asha.village || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      {translate('Aadhaar Number')}
-                    </label>
-                    <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md border">
-                      {asha.aadhaar || 'N/A'}
-                    </p>
-                  </div>
-
-                  <div className="pt-6 border-t">
-                    <h4 className="text-md font-medium text-gray-800 mb-4">
-                      {translate('Work Summary')}
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-4 bg-purple-50 rounded-lg">
-                        <div className="text-2xl font-bold text-purple-600">{patients.length}</div>
-                        <div className="text-sm text-gray-600">{translate('Patients')}</div>
-                      </div>
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <div className="text-2xl font-bold text-green-600">12</div>
-                        <div className="text-sm text-gray-600">{translate('This Month Visits')}</div>
-                      </div>
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-blue-600">8</div>
-                        <div className="text-sm text-gray-600">{translate('Programs')}</div>
-                      </div>
-                      <div className="text-center p-4 bg-orange-50 rounded-lg">
-                        <div className="text-2xl font-bold text-orange-600">4</div>
-                        <div className="text-sm text-gray-600">{translate('Active Schemes')}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-6 border-t">
-                    <button
-                      onClick={() => alert(translate('Profile editing functionality would be implemented here'))}
-                      className="w-full md:w-auto px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
+          {/* REFERRALS SECTION */}
+          {section === "referrals" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold flex items-center gap-2">
+                    <TrendingUp className="w-6 h-6 text-purple-600" />
+                    Patient Referrals
+                  </h3>
+                  <div className="flex gap-3">
+                    <select 
+                      className="px-4 py-2 border rounded-lg text-sm"
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
                     >
-                      {translate('Edit Profile')}
+                      <option value="all">All Status</option>
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                    <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm">
+                      <Plus className="w-4 h-4" /> New Referral
                     </button>
                   </div>
                 </div>
+
+                <div className="space-y-4">
+                  {REFERRALS.filter(ref => filterStatus === "all" || ref.status === filterStatus).map((referral) => (
+                    <div key={referral.id} className="border-2 border-gray-200 p-5 rounded-xl hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className="bg-purple-100 p-3 rounded-lg">
+                            <MapPin className="w-6 h-6 text-purple-600" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="font-bold text-lg">{referral.patient}</h4>
+                              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                                {referral.age} years
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${getPriorityColor(referral.priority)}`}>
+                                {referral.priority}
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                referral.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                referral.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                'bg-orange-100 text-orange-700'
+                              }`}>
+                                {referral.status}
+                              </span>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="text-gray-500">Referral Reason:</p>
+                                <p className="font-semibold">{referral.reason}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Referred To:</p>
+                                <p className="font-semibold">{referral.to}</p>
+                              </div>
+                            </div>
+                            <p className="text-gray-500 text-sm mt-2">Date: {referral.date}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
+                          Update Status
+                        </button>
+                        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                          View Details
+                        </button>
+                        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                          Contact Facility
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* INCENTIVES SECTION */}
+          {section === "incentives" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                  <Award className="w-6 h-6 text-purple-600" />
+                  Incentives & Performance
+                </h3>
+
+                <div className="grid md:grid-cols-3 gap-6 mb-6">
+                  <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 rounded-xl text-white">
+                    <p className="text-3xl font-bold">₹{INCENTIVES.filter(i => i.status === 'Approved').reduce((sum, i) => sum + i.amount, 0)}</p>
+                    <p className="text-purple-100 mt-1">Approved Incentives</p>
+                  </div>
+                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-5 rounded-xl text-white">
+                    <p className="text-3xl font-bold">₹{INCENTIVES.filter(i => i.status === 'Pending').reduce((sum, i) => sum + i.amount, 0)}</p>
+                    <p className="text-blue-100 mt-1">Pending Incentives</p>
+                  </div>
+                  <div className="bg-gradient-to-r from-green-500 to-green-600 p-5 rounded-xl text-white">
+                    <p className="text-3xl font-bold">{INCENTIVES.reduce((sum, i) => sum + i.count, 0)}</p>
+                    <p className="text-green-100 mt-1">Total Tasks Completed</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {INCENTIVES.map((incentive) => (
+                    <div key={incentive.id} className="border-2 border-gray-200 p-5 rounded-xl hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-3 rounded-lg ${
+                            incentive.status === 'Approved' ? 'bg-green-100' : 'bg-orange-100'
+                          }`}>
+                            <Award className={`w-6 h-6 ${
+                              incentive.status === 'Approved' ? 'text-green-600' : 'text-orange-600'
+                            }`} />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-800">{incentive.task}</h4>
+                            <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                              <span>Count: {incentive.count}</span>
+                              <span>Amount: ₹{incentive.amount}</span>
+                              <span>Date: {incentive.date}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                            incentive.status === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {incentive.status}
+                          </span>
+                          <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                            View Details
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MESSAGES SECTION */}
+          {section === "messages" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                  <Bell className="w-6 h-6 text-purple-600" />
+                  Messages & Notifications
+                </h3>
+
+                <div className="grid lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 space-y-4">
+                    {NOTIFICATIONS.map((notification) => (
+                      <div 
+                        key={notification.id} 
+                        className={`border-2 p-4 rounded-xl hover:shadow-md transition-shadow cursor-pointer ${
+                          notification.read ? 'border-gray-200' : 'border-purple-200 bg-purple-50'
+                        }`}
+                        onClick={() => setSelectedNotification(notification)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`px-2 py-1 rounded text-xs font-semibold ${getPriorityColor(notification.priority)}`}>
+                            {notification.priority}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-semibold text-gray-800">{notification.title}</h4>
+                              <span className="text-xs text-gray-500">{notification.date} {notification.time}</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{notification.body}</p>
+                            <p className="text-xs text-gray-500">From: {notification.from}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-gray-50 p-5 rounded-xl">
+                    <h4 className="font-semibold mb-4">Quick Actions</h4>
+                    <div className="space-y-3">
+                      <button className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-left">
+                        <MessageSquare className="w-4 h-4 inline mr-2" />
+                        Message ANM
+                      </button>
+                      <button className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-left">
+                        <Phone className="w-4 h-4 inline mr-2" />
+                        Call Supervisor
+                      </button>
+                      <button className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-left">
+                        <FileText className="w-4 h-4 inline mr-2" />
+                        Generate Report
+                      </button>
+                      <button className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-left">
+                        <Settings className="w-4 h-4 inline mr-2" />
+                        Notification Settings
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* REPORTS SECTION */}
+          {section === "reports" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                  <FileText className="w-6 h-6 text-purple-600" />
+                  Reports & History
+                </h3>
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                  <div className="border-2 border-gray-200 p-4 rounded-xl text-center hover:shadow-md transition-shadow">
+                    <FileText className="w-8 h-8 text-purple-600 mx-auto mb-2" />
+                    <p className="font-semibold">Monthly Report</p>
+                    <p className="text-sm text-gray-600">September 2025</p>
+                  </div>
+                  <div className="border-2 border-gray-200 p-4 rounded-xl text-center hover:shadow-md transition-shadow">
+                    <Users className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                    <p className="font-semibold">Beneficiary Report</p>
+                    <p className="text-sm text-gray-600">All beneficiaries</p>
+                  </div>
+                  <div className="border-2 border-gray-200 p-4 rounded-xl text-center hover:shadow-md transition-shadow">
+                    <TrendingUp className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+                    <p className="font-semibold">Performance Report</p>
+                    <p className="text-sm text-gray-600">Quarterly review</p>
+                  </div>
+                </div>
+
+                <div className="border-2 border-gray-200 rounded-xl p-5">
+                  <h4 className="font-semibold mb-4">Recent Activities</h4>
+                  <div className="space-y-3">
+                    {[...HOME_VISITS, ...REFERRALS.slice(0, 2)].map((activity, index) => (
+                      <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        {getStatusIcon(activity.status)}
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">{activity.patient || activity.patient}</p>
+                          <p className="text-xs text-gray-600">{activity.type || activity.reason}</p>
+                        </div>
+                        <span className="text-xs text-gray-500">{activity.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIDEO CALL SECTION */}
+          {section === "video_call" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                  <Phone className="w-6 h-6 text-purple-600" />
+                  Video Consultation
+                </h3>
+                
+                <div className="grid lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="border-2 border-gray-200 p-5 rounded-xl">
+                      <h4 className="font-semibold mb-3">Start New Consultation</h4>
+                      <div className="space-y-3">
+                        <input 
+                          type="text" 
+                          placeholder="Patient Name" 
+                          className="w-full px-4 py-2 border rounded-lg text-sm"
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Contact Number" 
+                          className="w-full px-4 py-2 border rounded-lg text-sm"
+                        />
+                        <select className="w-full px-4 py-2 border rounded-lg text-sm">
+                          <option>Select ANM/Doctor</option>
+                          <option>ANM Rekha Singh</option>
+                          <option>Dr. Sharma - PHC</option>
+                          <option>Dr. Verma - CHC</option>
+                        </select>
+                        <textarea 
+                          placeholder="Reason for consultation..." 
+                          rows="3"
+                          className="w-full px-4 py-2 border rounded-lg text-sm"
+                        ></textarea>
+                        <button className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-semibold">
+                          Start Video Call
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="border-2 border-gray-200 p-5 rounded-xl">
+                      <h4 className="font-semibold mb-3">Recent Consultations</h4>
+                      <div className="space-y-3">
+                        {[
+                          { patient: "Priya Sharma", date: "2025-09-28", doctor: "ANM Rekha Singh", status: "Completed" },
+                          { patient: "Ramesh Kumar", date: "2025-09-25", doctor: "Dr. Sharma", status: "Completed" },
+                          { patient: "Sunita Devi", date: "2025-09-20", doctor: "ANM Rekha Singh", status: "Completed" }
+                        ].map((consult, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <p className="font-semibold text-sm">{consult.patient}</p>
+                              <p className="text-xs text-gray-600">{consult.doctor} • {consult.date}</p>
+                            </div>
+                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                              {consult.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-2 border-gray-200 p-5 rounded-xl">
+                      <h4 className="font-semibold mb-3">Available Contacts</h4>
+                      <div className="space-y-2">
+                        {[
+                          { name: "ANM Rekha Singh", role: "ANM", status: "Available" },
+                          { name: "Dr. Sharma", role: "PHC Doctor", status: "Available" },
+                          { name: "Dr. Verma", role: "CHC Specialist", status: "Busy" }
+                        ].map((contact, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                contact.status === 'Available' ? 'bg-green-500' : 'bg-orange-500'
+                              }`}></div>
+                              <span className="font-medium text-sm">{contact.name}</span>
+                            </div>
+                            <span className="text-xs text-gray-500">{contact.role}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Jitsi Video Call Component */}
+                <div className="mt-6">
+                  <JitsiMeetingWrapper
+                    roomName={`ASHA-${asha.id}-${Date.now()}`}
+                    displayName={asha.name}
+                    onMeetingEnd={() => console.log('Meeting ended')}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SETTINGS SECTION */}
+          {section === "settings" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                  <Settings className="w-6 h-6 text-purple-600" />
+                  Settings
+                </h3>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="font-semibold">Profile Settings</h4>
+                    <div className="space-y-3">
+                      <input 
+                        type="text" 
+                        placeholder="Full Name" 
+                        defaultValue={asha.name}
+                        className="w-full px-4 py-2 border rounded-lg text-sm"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Phone Number" 
+                        className="w-full px-4 py-2 border rounded-lg text-sm"
+                      />
+                      <input 
+                        type="email" 
+                        placeholder="Email Address" 
+                        className="w-full px-4 py-2 border rounded-lg text-sm"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Village/Location" 
+                        className="w-full px-4 py-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="font-semibold">App Settings</h4>
+                    <div className="space-y-3">
+                      <select className="w-full px-4 py-2 border rounded-lg text-sm">
+                        <option>English</option>
+                        <option>Hindi</option>
+                        <option>Local Language</option>
+                      </select>
+                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <span className="text-sm">Offline Mode</span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" className="sr-only peer" defaultChecked />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <span className="text-sm">Push Notifications</span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" className="sr-only peer" defaultChecked />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <span className="text-sm">Auto-sync Data</span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" className="sr-only peer" defaultChecked />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-semibold">
+                    Save Changes
+                  </button>
+                  <button className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold">
+                    Reset to Default
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* HELP SECTION */}
+          {section === "help" && (
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                  <HelpCircle className="w-6 h-6 text-purple-600" />
+                  Help & FAQ
+                </h3>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="font-semibold">Frequently Asked Questions</h4>
+                    <div className="space-y-3">
+                      {[
+                        { q: "How to register a new pregnant woman?", a: "Go to Beneficiaries → Add New → Select Pregnant Woman category" },
+                        { q: "What to do in case of high risk pregnancy?", a: "Immediately refer to ANM/PHC and mark as high risk in the system" },
+                        { q: "How to record home visits?", a: "Use Home Visit Checklist section to record each visit with proper checklist" },
+                        { q: "Incentive payment process?", a: "Incentives are processed monthly based on verified tasks in the system" }
+                      ].map((faq, index) => (
+                        <div key={index} className="border-2 border-gray-200 p-4 rounded-xl">
+                          <h5 className="font-semibold text-sm mb-2">{faq.q}</h5>
+                          <p className="text-sm text-gray-600">{faq.a}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="font-semibold">Quick Support</h4>
+                    <div className="space-y-3">
+                      <button className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium">
+                        <Phone className="w-4 h-4" />
+                        Call ANM Supervisor
+                      </button>
+                      <button className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm font-medium">
+                        <MessageSquare className="w-4 h-4" />
+                        Message Support
+                      </button>
+                      <button className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm font-medium">
+                        <FileText className="w-4 h-4" />
+                        Download User Manual
+                      </button>
+                      <button className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center gap-2 text-sm font-medium">
+                        <Settings className="w-4 h-4" />
+                        Training Materials
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

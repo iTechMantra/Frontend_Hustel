@@ -24,40 +24,69 @@ import {
   MapPin,
   Award,
   Users,
+  Smartphone,
+  Wifi,
+  WifiOff,
+  Clock,
 } from "lucide-react";
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const [lang, setLang] = useState(getCurrentLanguage());
+  const [isLoading, setIsLoading] = useState(false);
   const roleSectionRef = useRef(null);
 
   useEffect(() => {
     initializeTranslations();
-  }, [navigate]);
+  }, []);
 
-
-  const handleRoleSelect = (role) => {
-    switch (role) {
-      case "patient":
-        navigate("/patient/signup");
-        break;
-      case "asha":
-        navigate("/asha/signup");
-        break;
-      case "anm":
-        navigate("/anm/signup");
-        break;
-      case "phc":
-        navigate("/phc/signup");
-        break;
-      default:
-        break;
+  const handleRoleSelect = async (role) => {
+    setIsLoading(true);
+    try {
+      // Add a small delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      switch (role) {
+        case "patient":
+          navigate("/user/signup"); // Corrected from /patient/signup to /user/signup
+          break;
+        case "asha":
+          navigate("/asha/signup");
+          break;
+        case "anm":
+          navigate("/anm/signup");
+          break;
+        case "phc":
+          navigate("/phc/signup");
+          break;
+        default:
+          console.warn("Unknown role selected:", role);
+          break;
+      }
+    } catch (error) {
+      console.error("Navigation error:", error);
+      // Fallback to login page if signup doesn't exist
+      navigate("/user/login");
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleGetStarted = () => {
+    roleSectionRef.current?.scrollIntoView({ 
+      behavior: "smooth",
+      block: "start"
+    });
   };
 
   // --- Features Section ---
   const FeatureCard = ({ icon, title, description, color }) => (
-    <div className="group bg-white rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-300 border border-pink-100">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="group bg-white rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-300 border border-pink-100"
+    >
       <div
         className={`${color} w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}
       >
@@ -69,7 +98,7 @@ export default function LandingPage() {
       <p className="text-gray-600 text-sm leading-relaxed">
         {translate(description)}
       </p>
-    </div>
+    </motion.div>
   );
 
   const features = [
@@ -120,7 +149,7 @@ export default function LandingPage() {
       role: "asha",
       title: "ASHA Worker",
       description:
-        "Your village’s health champion – record data offline, get reminders, and earn rewards.",
+        "Your village's health champion – record data offline, get reminders, and earn rewards.",
       icon: <Heart className="h-8 w-8 text-white" />,
       gradient: "bg-gradient-to-br from-pink-400 to-pink-600",
     },
@@ -152,6 +181,8 @@ export default function LandingPage() {
 
   const RoleCard = ({ role, title, description, icon, gradient }) => (
     <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      whileInView={{ opacity: 1, scale: 1 }}
       whileHover={{ scale: 1.05 }}
       onClick={() => handleRoleSelect(role)}
       className="group cursor-pointer bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl border border-gray-100 h-full"
@@ -171,34 +202,122 @@ export default function LandingPage() {
     </motion.div>
   );
 
+  // --- Benefits Section ---
+  const benefits = [
+    {
+      icon: <WifiOff className="h-8 w-8 text-pink-600" />,
+      title: "Works Offline",
+      description: "Continue working even without internet connection in remote areas"
+    },
+    {
+      icon: <Smartphone className="h-8 w-8 text-teal-600" />,
+      title: "Mobile First",
+      description: "Designed specifically for mobile devices used in rural communities"
+    },
+    {
+      icon: <Clock className="h-8 w-8 text-purple-600" />,
+      title: "Time Saving",
+      description: "Reduce paperwork and administrative burden by up to 70%"
+    },
+    {
+      icon: <Shield className="h-8 w-8 text-blue-600" />,
+      title: "Data Secure",
+      description: "Your health data is encrypted and stored securely"
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-teal-50 font-sans">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mb-4"></div>
+            <p className="text-gray-700">Loading...</p>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-pink-100 via-white to-teal-100 py-16 md:py-24 relative overflow-hidden">
         <div className="container mx-auto px-4 text-center relative z-10">
-          <h1 className="text-5xl font-extrabold text-gray-900 mb-6">
+          <motion.h1 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-5xl font-extrabold text-gray-900 mb-6"
+          >
             {translate("E-Sannidhi")}{" "}
             <span className="bg-gradient-to-r from-pink-500 via-purple-500 to-teal-500 bg-clip-text text-transparent">
               {translate("Healthcare Starts with You")}
             </span>
-          </h1>
-          <p className="text-lg md:text-xl text-gray-700 mb-10 leading-relaxed">
+          </motion.h1>
+          
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="text-lg md:text-xl text-gray-700 mb-10 leading-relaxed max-w-3xl mx-auto"
+          >
             {translate(
               "Empowering ASHA, ANM, PHC staff & Beneficiaries with offline-first tools, reminders, and secure consultations."
             )}
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          </motion.p>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+            className="flex flex-col sm:flex-row gap-4 justify-center"
+          >
             <button
-              onClick={() =>
-                roleSectionRef.current.scrollIntoView({ behavior: "smooth" })
-              }
+              onClick={handleGetStarted}
               className="bg-gradient-to-r from-pink-500 to-teal-500 hover:from-pink-600 hover:to-teal-600 text-white font-semibold py-3 px-8 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
             >
               {translate("Get Started Today")}
             </button>
-           
- 
+            
+            <button
+              onClick={() => navigate("/user/login")}
+              className="border-2 border-pink-500 text-pink-500 hover:bg-pink-500 hover:text-white font-semibold py-3 px-8 rounded-xl transition-all duration-300 transform hover:scale-105"
+            >
+              {translate("Already have an account? Login")}
+            </button>
+          </motion.div>
+        </div>
+      </section>
 
+      {/* Benefits Section */}
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              {translate("Why Choose E-Sannidhi?")}
+            </h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              {translate("Built specifically for India's rural healthcare ecosystem")}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
+            {benefits.map((benefit, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="text-center"
+              >
+                <div className="bg-pink-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  {benefit.icon}
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {translate(benefit.title)}
+                </h3>
+                <p className="text-gray-600 text-sm">
+                  {translate(benefit.description)}
+                </p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
@@ -242,6 +361,37 @@ export default function LandingPage() {
               <RoleCard key={role.role} {...role} />
             ))}
           </div>
+          
+          {/* Alternative Login Option */}
+          <div className="text-center mt-12">
+            <p className="text-gray-600 mb-4">
+              {translate("Already have an account?")}
+            </p>
+            <button
+              onClick={() => navigate("/user/login")}
+              className="text-pink-600 hover:text-pink-700 font-semibold underline"
+            >
+              {translate("Login here")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-16 bg-gradient-to-r from-pink-500 to-teal-500 text-white">
+        <div className="container mx-auto px-4 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            {translate("Ready to Transform Rural Healthcare?")}
+          </h2>
+          <p className="text-lg mb-8 max-w-2xl mx-auto">
+            {translate("Join thousands of healthcare workers using E-Sannidhi to deliver better care in rural communities.")}
+          </p>
+          <button
+            onClick={handleGetStarted}
+            className="bg-white text-pink-600 hover:bg-gray-100 font-semibold py-3 px-8 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg"
+          >
+            {translate("Start Your Journey Today")}
+          </button>
         </div>
       </section>
 
