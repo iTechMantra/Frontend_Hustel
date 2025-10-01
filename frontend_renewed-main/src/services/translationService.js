@@ -38,6 +38,7 @@ const dictionaries = {
     'Add Patient': 'Add Patient',
 
     // Roles
+    "Beneficiaries": "Beneficiaries",
     'Patient': 'Patient',
     'ASHA Worker': 'ASHA Worker',
     'ANM': 'ANM',
@@ -123,6 +124,7 @@ const dictionaries = {
     'Add Patient': 'ਮਰੀਜ਼ ਜੋੜੋ',
 
     // Roles
+     "Beneficiaries": "ਲਾਭਪਾਤਰੀ",
     'Patient': 'ਮਰੀਜ਼',
     'ASHA Worker': 'ਆਸ਼ਾ ਵਰਕਰ',
     'ANM': 'ਏਐਨਐਮ',
@@ -210,6 +212,7 @@ const dictionaries = {
     'Add Patient': 'मरीज जोड़ें',
 
     // Roles
+     "Beneficiaries": "लाभार्थी",
     'Patient': 'मरीज',
     'ASHA Worker': 'आशा कार्यकर्ता',
     'ANM': 'एएनएम',
@@ -295,6 +298,7 @@ const dictionaries = {
     'Add Patient': 'ರೋಗಿಯನ್ನು ಸೇರಿಸಿ',
 
     // Roles
+   "Beneficiaries": "ಪ್ರಯೋಜನಾರ್ಥಿಗಳು",
     'Patient': 'ರೋಗಿ',
     'ASHA Worker': 'ಆಶಾ ಕಾರ್ಯಕರ್ತೆ',
     'ANM': 'ಎಎನ್‌ಎಮ್',

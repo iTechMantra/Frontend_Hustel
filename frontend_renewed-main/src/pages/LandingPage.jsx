@@ -142,7 +142,7 @@ export default function LandingPage() {
     },
     {
       role: "patient",
-      title: "Patient",
+      title: "Beneficiaries",
       description:
         "View your health passbook, get reminders, and consult doctors via ASHA.",
       icon: <User className="h-8 w-8 text-white" />,
@@ -184,7 +184,7 @@ export default function LandingPage() {
           </h1>
           <p className="text-lg md:text-xl text-gray-700 mb-10 leading-relaxed">
             {translate(
-              "Empowering ASHA, ANM, PHC staff & patients with offline-first tools, reminders, and secure consultations."
+              "Empowering ASHA, ANM, PHC staff & Beneficiaries with offline-first tools, reminders, and secure consultations."
             )}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -212,7 +212,7 @@ export default function LandingPage() {
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto">
               {translate(
-                "Built for ASHAs, ANMs, PHC staff, and patients in rural India."
+                "Built for ASHAs, ANMs, PHC staff, and Beneficiaries in rural India."
               )}
             </p>
           </div>
